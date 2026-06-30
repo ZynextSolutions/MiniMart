@@ -171,6 +171,3 @@ See [`docs/`](./docs/) for full architecture and design.
 
 Production deployment: [`docs/deployment.md`](./docs/deployment.md)
 
-## Next Phase
-
-**Phase 9 — Dashboard:** KPI cards, sales charts, notifications widgets.
