@@ -14,13 +14,14 @@ import type { DashboardKPIs } from "./dashboard-types";
 
 interface KpiCardsProps {
   kpis: DashboardKPIs;
+  currency: string;
 }
 
-export function KpiCards({ kpis }: KpiCardsProps) {
+export function KpiCards({ kpis, currency }: KpiCardsProps) {
   const cards = [
     {
       title: "Today's Sales",
-      value: formatMoney(kpis.todaySales),
+      value: formatMoney(kpis.todaySales, currency),
       description:
         kpis.todayTransactionCount > 0
           ? `${kpis.todayTransactionCount} transaction${kpis.todayTransactionCount === 1 ? "" : "s"}`
@@ -30,7 +31,7 @@ export function KpiCards({ kpis }: KpiCardsProps) {
     },
     {
       title: "Avg. Transaction",
-      value: formatMoney(kpis.avgTransaction),
+      value: formatMoney(kpis.avgTransaction, currency),
       description: "Today's average ticket size",
       icon: TrendingUp,
     },
@@ -59,7 +60,7 @@ export function KpiCards({ kpis }: KpiCardsProps) {
     },
     {
       title: "Cash in Register",
-      value: formatMoney(kpis.cashInRegister),
+      value: formatMoney(kpis.cashInRegister, currency),
       description:
         kpis.openRegisterCount > 0
           ? `${kpis.openRegisterCount} open register${kpis.openRegisterCount === 1 ? "" : "s"}`

@@ -36,6 +36,7 @@ export default async function DashboardPage() {
   return (
     <DashboardClient
       userName={userName}
+      currency={session.user.currency}
       data={{
         kpis,
         salesTrend,

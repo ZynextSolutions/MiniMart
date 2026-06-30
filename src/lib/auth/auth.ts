@@ -65,6 +65,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           ? await getUserPermissions(token.id as string, branchId)
           : new Set<string>();
         token.permissions = Array.from(permissions);
+
+        const organization = await prisma.organization.findUnique({
+          where: { id: token.organizationId as string },
+          select: { currency: true, name: true },
+        });
+        if (organization) {
+          token.currency = organization.currency;
+          token.organizationName = organization.name;
+        }
+
         delete token.error;
       }
 

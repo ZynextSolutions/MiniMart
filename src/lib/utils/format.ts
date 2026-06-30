@@ -1,4 +1,4 @@
-let systemCurrency = "THB";
+let systemCurrency = "MMK";
 
 export function setSystemCurrency(currency?: string) {
   if (!currency) return;

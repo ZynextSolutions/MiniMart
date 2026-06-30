@@ -56,7 +56,13 @@ function ChartTooltip({
   );
 }
 
-export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
+export function SalesTrendChart({
+  data,
+  currency,
+}: {
+  data: SalesTrendPoint[];
+  currency: string;
+}) {
   const hasData = data.some((d) => d.sales > 0);
 
   return (
@@ -93,7 +99,7 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
                 }
                 width={48}
               />
-              <Tooltip content={<ChartTooltip formatter={(v) => formatMoney(v)} />} />
+              <Tooltip content={<ChartTooltip formatter={(v) => formatMoney(v, currency)} />} />
               <Area
                 type="monotone"
                 dataKey="sales"
@@ -109,7 +115,13 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
   );
 }
 
-export function TopProductsChart({ data }: { data: TopProductPoint[] }) {
+export function TopProductsChart({
+  data,
+  currency,
+}: {
+  data: TopProductPoint[];
+  currency: string;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -149,7 +161,7 @@ export function TopProductsChart({ data }: { data: TopProductPoint[] }) {
                   return (
                     <div className="rounded-lg border bg-background px-3 py-2 text-sm shadow-md">
                       <p className="font-medium">{item.fullName}</p>
-                      <p className="text-muted-foreground">{formatMoney(item.revenue)}</p>
+                      <p className="text-muted-foreground">{formatMoney(item.revenue, currency)}</p>
                       <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
                   );
@@ -164,7 +176,13 @@ export function TopProductsChart({ data }: { data: TopProductPoint[] }) {
   );
 }
 
-export function PaymentBreakdownChart({ data }: { data: PaymentBreakdownPoint[] }) {
+export function PaymentBreakdownChart({
+  data,
+  currency,
+}: {
+  data: PaymentBreakdownPoint[];
+  currency: string;
+}) {
   const total = data.reduce((sum, d) => sum + d.amount, 0);
 
   return (
@@ -205,7 +223,7 @@ export function PaymentBreakdownChart({ data }: { data: PaymentBreakdownPoint[] 
                       <div className="rounded-lg border bg-background px-3 py-2 text-sm shadow-md">
                         <p className="font-medium">{item.label}</p>
                         <p className="text-muted-foreground">
-                          {formatMoney(item.amount)} ({pct}%)
+                          {formatMoney(item.amount, currency)} ({pct}%)
                         </p>
                       </div>
                     );
@@ -221,7 +239,7 @@ export function PaymentBreakdownChart({ data }: { data: PaymentBreakdownPoint[] 
                     style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
                   />
                   <span className="flex-1 truncate">{d.label}</span>
-                  <span className="text-muted-foreground">{formatMoney(d.amount)}</span>
+                  <span className="text-muted-foreground">{formatMoney(d.amount, currency)}</span>
                 </div>
               ))}
             </div>

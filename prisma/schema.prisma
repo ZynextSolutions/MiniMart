@@ -132,7 +132,7 @@ model Organization {
   address   String?
   city      String?
   country   String    @default("TH")
-  currency  String    @default("THB") @db.Char(3)
+  currency  String    @default("MMK") @db.Char(3)
   timezone  String    @default("Asia/Bangkok")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -1193,7 +1193,7 @@ model BankAccount {
   bankName      String  @map("bank_name")
   accountNumber String  @map("account_number")
   accountName   String  @map("account_name")
-  currency      String  @default("THB") @db.Char(3)
+  currency      String  @default("MMK") @db.Char(3)
   isActive      Boolean @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
 

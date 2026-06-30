@@ -253,7 +253,7 @@ export function BankPageClient({
             </div>
             <div className="space-y-1">
               <Label htmlFor="currency">Currency</Label>
-              <Input id="currency" name="currency" defaultValue="THB" />
+              <Input id="currency" name="currency" defaultValue="MMK" />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAccountDialogOpen(false)}>Cancel</Button>

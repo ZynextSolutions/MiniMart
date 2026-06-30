@@ -83,7 +83,7 @@ function numberFromCode(code: string, fallback = 0): number {
 async function seedSecurityAndAuth() {
   const org = await prisma.organization.upsert({
     where: { id: ORG_ID },
-    update: {},
+    update: { currency: "MMK", timezone: "Asia/Yangon", country: "MM" },
     create: {
       id: ORG_ID,
       name: "Mini Mart",

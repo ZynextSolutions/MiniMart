@@ -16,9 +16,10 @@ import type { DashboardData } from "./dashboard-types";
 interface DashboardClientProps {
   data: DashboardData;
   userName: string;
+  currency: string;
 }
 
-export function DashboardClient({ data, userName }: DashboardClientProps) {
+export function DashboardClient({ data, userName, currency }: DashboardClientProps) {
   return (
     <div className="space-y-6">
       <div>
@@ -26,16 +27,16 @@ export function DashboardClient({ data, userName }: DashboardClientProps) {
         <p className="text-muted-foreground">Welcome back, {userName}</p>
       </div>
 
-      <KpiCards kpis={data.kpis} />
+      <KpiCards kpis={data.kpis} currency={currency} />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <SalesTrendChart data={data.salesTrend} />
-        <TopProductsChart data={data.topProducts} />
+        <SalesTrendChart data={data.salesTrend} currency={currency} />
+        <TopProductsChart data={data.topProducts} currency={currency} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <PaymentBreakdownChart data={data.paymentBreakdown} />
-        <RecentTransactionsWidget transactions={data.recentTransactions} />
+        <PaymentBreakdownChart data={data.paymentBreakdown} currency={currency} />
+        <RecentTransactionsWidget transactions={data.recentTransactions} currency={currency} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

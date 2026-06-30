@@ -15,8 +15,10 @@ import type {
 
 export function RecentTransactionsWidget({
   transactions,
+  currency,
 }: {
   transactions: RecentTransaction[];
+  currency: string;
 }) {
   return (
     <Card>
@@ -61,7 +63,7 @@ export function RecentTransactionsWidget({
                     {formatDistanceToNow(new Date(tx.saleDate), { addSuffix: true })}
                   </p>
                 </div>
-                <span className="shrink-0 font-semibold">{formatMoney(tx.grandTotal)}</span>
+                <span className="shrink-0 font-semibold">{formatMoney(tx.grandTotal, currency)}</span>
               </div>
             ))}
           </div>

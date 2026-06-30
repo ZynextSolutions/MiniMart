@@ -352,7 +352,7 @@ export class AccountingService {
           bankName: input.bankName,
           accountNumber: input.accountNumber,
           accountName: input.accountName,
-          currency: input.currency ?? "THB",
+          currency: input.currency ?? "MMK",
         },
       });
 
