@@ -10,6 +10,14 @@ interface Props {
   searchParams: Promise<{ view?: string; from?: string; to?: string; branchId?: string }>;
 }
 
+function parseDateStart(date: string): Date {
+  return new Date(`${date}T00:00:00.000`);
+}
+
+function parseDateEnd(date: string): Date {
+  return new Date(`${date}T23:59:59.999`);
+}
+
 export default async function SalesReportPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -25,8 +33,8 @@ export default async function SalesReportPage({ searchParams }: Props) {
   const filters = {
     organizationId: session.user.organizationId,
     branchId: params.branchId,
-    from: new Date(from),
-    to: new Date(to),
+    from: parseDateStart(from),
+    to: parseDateEnd(to),
   };
 
   const branches = await BranchService.list(session.user.organizationId);

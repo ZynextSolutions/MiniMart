@@ -50,6 +50,7 @@ export interface CompleteSaleDTO {
   orderDiscount?: Discount | null;
   lines: CartLineDTO[];
   payments: PaymentDTO[];
+  cashReceived?: number;
   idempotencyKey?: string;
   notes?: string;
 }
@@ -318,9 +319,17 @@ export class PosService {
       );
     }
 
-    const cashPayment = dto.payments.find((p) => p.method === "CASH");
-    const amountPaid = cashPayment ? cashPayment.amount : totals.grandTotal;
-    const changeAmount = calculateChange(amountPaid, totals.grandTotal);
+    const isCashOnlyPayment =
+      dto.payments.length === 1 && dto.payments[0]?.method === "CASH";
+    const amountPaid = isCashOnlyPayment
+      ? (dto.cashReceived ?? dto.payments[0].amount)
+      : totals.grandTotal;
+    if (isCashOnlyPayment && amountPaid + 0.02 < totals.grandTotal) {
+      throw new ValidationError("Insufficient cash received");
+    }
+    const changeAmount = isCashOnlyPayment
+      ? calculateChange(amountPaid, totals.grandTotal)
+      : 0;
 
     if (dto.customerId) {
       const customer = await prisma.customer.findFirst({

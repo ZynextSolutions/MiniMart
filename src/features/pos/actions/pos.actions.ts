@@ -56,6 +56,7 @@ const completeSaleSchema = z.object({
   orderDiscount: discountSchema,
   lines: z.array(lineSchema).min(1),
   payments: z.array(paymentSchema).min(1),
+  cashReceived: z.number().nonnegative().optional(),
   idempotencyKey: z.string().optional(),
   notes: z.string().optional(),
 });

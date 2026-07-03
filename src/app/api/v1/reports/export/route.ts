@@ -12,9 +12,11 @@ import {
 function parseDateRange(searchParams: URLSearchParams) {
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 8)}01`;
+  const fromRaw = searchParams.get("from") ?? monthStart;
+  const toRaw = searchParams.get("to") ?? today;
   return {
-    from: new Date(searchParams.get("from") ?? monthStart),
-    to: new Date(searchParams.get("to") ?? today),
+    from: new Date(`${fromRaw}T00:00:00.000`),
+    to: new Date(`${toRaw}T23:59:59.999`),
     branchId: searchParams.get("branchId") ?? undefined,
   };
 }

@@ -104,7 +104,7 @@ export class ReceiptService {
   <div class="row total"><span>TOTAL</span><span>${money(data.grandTotal)}</span></div>
   <div class="divider"></div>
   ${paymentsHtml}
-  ${data.changeAmount > 0 ? `<div class="row"><span>Change</span><span>${money(data.changeAmount)}</span></div>` : ""}
+  <div class="row"><span>Change</span><span>${money(data.changeAmount)}</span></div>
   <div class="divider"></div>
   ${data.verificationUrl ? `<div class="center"><img src="" alt="QR" id="receipt-qr" data-url="${escapeHtml(data.verificationUrl)}" style="width:80px;height:80px" /></div>` : ""}
   <div class="center">Thank you for shopping!</div>
@@ -182,9 +182,7 @@ export class ReceiptService {
     for (const p of data.payments) {
       b.line(`${p.method}:${"".padStart(chars - p.method.length - money(p.amount).length)}${money(p.amount)}`);
     }
-    if (data.changeAmount > 0) {
-      b.line(`Change:${"".padStart(chars - 8 - money(data.changeAmount).length)}${money(data.changeAmount)}`);
-    }
+    b.line(`Change:${"".padStart(chars - 8 - money(data.changeAmount).length)}${money(data.changeAmount)}`);
 
     b.separator("-", chars).align("center");
     if (data.verificationUrl) {

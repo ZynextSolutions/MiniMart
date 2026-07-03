@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,11 @@ export function ReportFiltersBar({
 }: ReportFiltersBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [branchId, setBranchId] = useState(defaultBranchId ?? "all");
+
+  useEffect(() => {
+    setBranchId(defaultBranchId ?? "all");
+  }, [defaultBranchId]);
 
   function apply(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,7 +60,6 @@ export function ReportFiltersBar({
       if (to) params.set("to", to);
     }
 
-    const branchId = form.get("branchId") as string;
     if (branchId && branchId !== "all") params.set("branchId", branchId);
     else params.delete("branchId");
 
@@ -113,7 +118,7 @@ export function ReportFiltersBar({
       {branches.length > 0 && (
         <div className="space-y-1">
           <Label htmlFor="branchId">Branch</Label>
-          <Select name="branchId" defaultValue={defaultBranchId ?? "all"}>
+          <Select value={branchId} onValueChange={setBranchId}>
             <SelectTrigger className="w-44">
               <SelectValue placeholder="All branches" />
             </SelectTrigger>

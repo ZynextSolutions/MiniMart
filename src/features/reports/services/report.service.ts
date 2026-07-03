@@ -28,6 +28,13 @@ function toNum(v: Decimal | number | null | undefined): number {
   return Number(v);
 }
 
+function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export class ReportService {
   // ─── Sales ───────────────────────────────────────────────
 
@@ -48,7 +55,7 @@ export class ReportService {
     >();
 
     for (const s of sales) {
-      const date = s.saleDate.toISOString().slice(0, 10);
+      const date = localDateKey(s.saleDate);
       const row = byDate.get(date) ?? {
         date,
         transactionCount: 0,
@@ -200,23 +207,29 @@ export class ReportService {
   static async getSalesByPaymentMethod(filters: ReportFilters) {
     const payments = await prisma.payment.findMany({
       where: { sale: saleWhere(filters) },
-      select: { method: true, amount: true },
+      select: { method: true, amount: true, saleId: true },
     });
 
-    const byMethod = new Map<string, { method: string; transactionCount: number; totalAmount: number }>();
+    const byMethod = new Map<string, { method: string; transactionCount: number; totalAmount: number; saleIds: Set<string> }>();
 
     for (const p of payments) {
       const row = byMethod.get(p.method) ?? {
         method: p.method,
         transactionCount: 0,
         totalAmount: 0,
+        saleIds: new Set<string>(),
       };
-      row.transactionCount += 1;
+      row.saleIds.add(p.saleId);
       row.totalAmount += toNum(p.amount);
+      row.transactionCount = row.saleIds.size;
       byMethod.set(p.method, row);
     }
 
-    return { rows: Array.from(byMethod.values()).sort((a, b) => b.totalAmount - a.totalAmount) };
+    return {
+      rows: Array.from(byMethod.values())
+        .map(({ saleIds: _, ...row }) => row)
+        .sort((a, b) => b.totalAmount - a.totalAmount),
+    };
   }
 
   // ─── Purchases ───────────────────────────────────────────
@@ -255,6 +268,7 @@ export class ReportService {
     const receipts = await prisma.goodsReceipt.findMany({
       where: {
         organizationId: filters.organizationId,
+        ...(filters.branchId ? { warehouse: { branchId: filters.branchId } } : {}),
         receiptDate: { gte: filters.from, lte: filters.to },
         status: "COMPLETED",
       },
@@ -364,7 +378,11 @@ export class ReportService {
 
     const stock = await prisma.stockLevel.findMany({
       where: {
-        warehouse: { organizationId: filters.organizationId, deletedAt: null },
+        warehouse: {
+          organizationId: filters.organizationId,
+          deletedAt: null,
+          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        },
         quantity: { gt: 0 },
       },
       include: {
@@ -397,7 +415,11 @@ export class ReportService {
 
     const stock = await prisma.stockLevel.findMany({
       where: {
-        warehouse: { organizationId: filters.organizationId, deletedAt: null },
+        warehouse: {
+          organizationId: filters.organizationId,
+          deletedAt: null,
+          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        },
         quantity: { gt: 0 },
       },
       include: {

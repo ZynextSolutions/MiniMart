@@ -78,6 +78,7 @@ export function PaymentDialog({
     }
 
     const payments: { method: PaymentMethod; amount: number; reference?: string }[] = [];
+    let cashReceivedAmount: number | undefined;
 
     if (mode === "CASH") {
       const received = parseFloat(cashReceived) || grandTotal;
@@ -86,6 +87,7 @@ export function PaymentDialog({
         setSubmitting(false);
         return;
       }
+      cashReceivedAmount = received;
       payments.push({ method: "CASH", amount: grandTotal });
     } else if (mode === "MIXED") {
       const cash = parseFloat(cashReceived) || 0;
@@ -125,6 +127,7 @@ export function PaymentDialog({
         costPrice: i.costPrice,
       })),
       payments,
+      cashReceived: cashReceivedAmount,
       idempotencyKey,
     });
 
