@@ -1,6 +1,9 @@
 export interface DashboardKPIs {
   todaySales: number;
+  todayReturns: number;
+  todayNetSales: number;
   todayTransactionCount: number;
+  todayReturnCount: number;
   avgTransaction: number;
   lowStockCount: number;
   expiringSoonCount: number;

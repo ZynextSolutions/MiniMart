@@ -20,11 +20,11 @@ interface KpiCardsProps {
 export function KpiCards({ kpis, currency }: KpiCardsProps) {
   const cards = [
     {
-      title: "Today's Sales",
-      value: formatMoney(kpis.todaySales, currency),
+      title: "Today's Net Sales",
+      value: formatMoney(kpis.todayNetSales, currency),
       description:
-        kpis.todayTransactionCount > 0
-          ? `${kpis.todayTransactionCount} transaction${kpis.todayTransactionCount === 1 ? "" : "s"}`
+        kpis.todayTransactionCount > 0 || kpis.todayReturnCount > 0
+          ? `${kpis.todayTransactionCount} sale${kpis.todayTransactionCount === 1 ? "" : "s"}, ${kpis.todayReturnCount} return${kpis.todayReturnCount === 1 ? "" : "s"}`
           : "No sales recorded today",
       icon: ShoppingCart,
       href: "/reports/sales",

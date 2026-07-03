@@ -95,6 +95,8 @@ export const PERMISSIONS = {
   REPORTS: {
     DASHBOARD: "reports.dashboard",
     SALES: "reports.sales",
+    SALES_INVOICE_LIST: "reports.sales.invoice-list",
+    SALES_RETURN_LIST: "reports.sales.return-list",
     PURCHASES: "reports.purchases",
     INVENTORY: "reports.inventory",
     FINANCIAL: "reports.financial",
@@ -195,6 +197,8 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { code: "accounting.income.create", module: "accounting", action: "income.create", description: "Create income" },
   { code: "reports.dashboard", module: "reports", action: "dashboard", description: "View dashboard" },
   { code: "reports.sales", module: "reports", action: "sales", description: "Sales reports" },
+  { code: "reports.sales.invoice-list", module: "reports", action: "sales.invoice-list", description: "View sales invoice list report" },
+  { code: "reports.sales.return-list", module: "reports", action: "sales.return-list", description: "View sales return list report" },
   { code: "reports.purchases", module: "reports", action: "purchases", description: "Purchase reports" },
   { code: "reports.inventory", module: "reports", action: "inventory", description: "Inventory reports" },
   { code: "reports.financial", module: "reports", action: "financial", description: "Financial reports" },

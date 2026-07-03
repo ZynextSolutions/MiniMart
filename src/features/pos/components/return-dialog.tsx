@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatMoney } from "@/lib/utils/format";
 import { processReturnAction } from "@/features/pos/actions/pos.actions";
+import type { PaymentMethod } from "@prisma/client";
 
 interface ReturnDialogProps {
   open: boolean;
@@ -32,6 +40,7 @@ export function ReturnDialog({
   cashRegisterId,
   onComplete,
 }: ReturnDialogProps) {
+  type RefundMethod = "CASH" | "CARD" | "QR" | "BANK_TRANSFER";
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [sale, setSale] = useState<{
     id: string;
@@ -43,13 +52,35 @@ export function ReturnDialog({
       quantity: { toString(): string };
       unitPrice: { toString(): string };
       taxAmount: { toString(): string };
+      lineTotal: { toString(): string };
       costPrice: { toString(): string };
       taxRateId: string | null;
     }[];
+    payments: { method: PaymentMethod }[];
   } | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [refundMethod, setRefundMethod] = useState<RefundMethod>("CASH");
+  const [refundReference, setRefundReference] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      idempotencyKeyRef.current = `return-${crypto.randomUUID()}`;
+    } else {
+      idempotencyKeyRef.current = null;
+    }
+  }, [open]);
+
+  const refundAmount = sale
+    ? sale.lines.reduce((sum, line) => {
+        const qty = quantities[line.id] ?? 0;
+        if (qty <= 0) return sum;
+        const perQty = Number(line.quantity) > 0 ? Number(line.lineTotal) / Number(line.quantity) : 0;
+        return sum + perQty * qty;
+      }, 0)
+    : 0;
 
   async function handleLookup() {
     setLoading(true);
@@ -60,7 +91,21 @@ export function ReturnDialog({
         return;
       }
       const data = await sales.json();
+      const preferredMethod = (() => {
+        const original = data.payments?.[0]?.method as PaymentMethod | undefined;
+        if (
+          original === "CASH" ||
+          original === "CARD" ||
+          original === "QR" ||
+          original === "BANK_TRANSFER"
+        ) {
+          return original;
+        }
+        return "CASH";
+      })();
       setSale(data);
+      setRefundMethod(preferredMethod);
+      setRefundReference("");
       setQuantities(
         Object.fromEntries(data.lines.map((l: { id: string }) => [l.id, 0])),
       );
@@ -73,6 +118,12 @@ export function ReturnDialog({
 
   async function handleReturn() {
     if (!sale) return;
+    const idempotencyKey = idempotencyKeyRef.current;
+    if (!idempotencyKey) {
+      toast.error("Return session expired. Close and reopen the dialog.");
+      return;
+    }
+
     const lines = sale.lines
       .filter((l) => (quantities[l.id] ?? 0) > 0)
       .map((l) => ({
@@ -92,7 +143,10 @@ export function ReturnDialog({
       return;
     }
 
-    const total = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+    if ((refundMethod === "QR" || refundMethod === "BANK_TRANSFER") && !refundReference.trim()) {
+      toast.error("Refund reference required");
+      return;
+    }
 
     setSubmitting(true);
     const result = await processReturnAction({
@@ -101,7 +155,12 @@ export function ReturnDialog({
       sessionId,
       cashRegisterId,
       lines,
-      payments: [{ method: "CASH", amount: total }],
+      payments: [{
+        method: refundMethod,
+        amount: refundAmount,
+        reference: refundReference.trim() || undefined,
+      }],
+      idempotencyKey,
     });
     setSubmitting(false);
 
@@ -134,27 +193,58 @@ export function ReturnDialog({
         </div>
 
         {sale && (
-          <div className="space-y-2 max-h-60 overflow-auto">
-            {sale.lines.map((line) => (
-              <div key={line.id} className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
-                <div>
-                  <p className="font-medium">{line.productName}</p>
-                  <p className="text-muted-foreground">
-                    Sold: {Number(line.quantity)} · {formatMoney(Number(line.unitPrice))}
-                  </p>
+          <div className="space-y-3">
+            <div className="space-y-2 max-h-56 overflow-auto">
+              {sale.lines.map((line) => (
+                <div key={line.id} className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
+                  <div>
+                    <p className="font-medium">{line.productName}</p>
+                    <p className="text-muted-foreground">
+                      Sold: {Number(line.quantity)} · {formatMoney(Number(line.unitPrice))}
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={Number(line.quantity)}
+                    className="w-20"
+                    value={quantities[line.id] ?? 0}
+                    onChange={(e) =>
+                      setQuantities({ ...quantities, [line.id]: parseFloat(e.target.value) || 0 })
+                    }
+                  />
                 </div>
-                <Input
-                  type="number"
-                  min="0"
-                  max={Number(line.quantity)}
-                  className="w-20"
-                  value={quantities[line.id] ?? 0}
-                  onChange={(e) =>
-                    setQuantities({ ...quantities, [line.id]: parseFloat(e.target.value) || 0 })
-                  }
-                />
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Refund Method</Label>
+                <Select value={refundMethod} onValueChange={(value) => setRefundMethod(value as RefundMethod)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="CARD">Card</SelectItem>
+                    <SelectItem value="QR">QR</SelectItem>
+                    <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            ))}
+              {(refundMethod === "CARD" || refundMethod === "QR" || refundMethod === "BANK_TRANSFER") && (
+                <div className="space-y-1">
+                  <Label>
+                    Reference {(refundMethod === "QR" || refundMethod === "BANK_TRANSFER") ? "(required)" : "(optional)"}
+                  </Label>
+                  <Input value={refundReference} onChange={(e) => setRefundReference(e.target.value)} />
+                </div>
+              )}
+            </div>
+
+            <p className="text-sm font-medium">
+              Refund Amount: {formatMoney(refundAmount)}
+            </p>
           </div>
         )}
 

@@ -18,6 +18,8 @@ function parseDateRange(searchParams: URLSearchParams) {
     from: new Date(`${fromRaw}T00:00:00.000`),
     to: new Date(`${toRaw}T23:59:59.999`),
     branchId: searchParams.get("branchId") ?? undefined,
+    query: searchParams.get("query") ?? undefined,
+    paymentMethod: searchParams.get("paymentMethod") ?? undefined,
   };
 }
 
@@ -43,7 +45,12 @@ async function buildExportData(
   filters: ReturnType<typeof parseDateRange>,
   title: string,
 ): Promise<ExportTableData | null> {
-  const base = { organizationId, ...filters };
+  const base = {
+    organizationId,
+    branchId: filters.branchId,
+    from: filters.from,
+    to: filters.to,
+  };
   const money = (value: number) => formatExportMoney(value, currency);
   const rangeSubtitle = dateRangeSubtitle(filters.from, filters.to);
 
@@ -55,21 +62,31 @@ async function buildExportData(
         subtitle: rangeSubtitle,
         columns: [
           { header: "Date", key: "date", width: 72 },
-          { header: "Transactions", key: "transactionCount", align: "right", width: 72 },
-          { header: "Sales", key: "totalSales", align: "right", width: 88 },
+          { header: "Total Txn", key: "totalTransactionCount", align: "right", width: 56 },
+          { header: "Sales Txn", key: "transactionCount", align: "right", width: 56 },
+          { header: "Returns", key: "returnCount", align: "right", width: 56 },
+          { header: "Gross Sales", key: "totalSales", align: "right", width: 88 },
+          { header: "Sales Returns", key: "totalReturns", align: "right", width: 88 },
+          { header: "Net Sales", key: "netSales", align: "right", width: 88 },
           { header: "Tax", key: "totalTax", align: "right", width: 88 },
           { header: "Discount", key: "totalDiscount", align: "right", width: 88 },
         ],
         rows: report.rows.map((r) => ({
           date: r.date,
+          totalTransactionCount: r.totalTransactionCount,
           transactionCount: r.transactionCount,
+          returnCount: r.returnCount,
           totalSales: money(r.totalSales),
+          totalReturns: money(r.totalReturns),
+          netSales: money(r.netSales),
           totalTax: money(r.totalTax),
           totalDiscount: money(r.totalDiscount),
         })),
         summary: {
-          Total: money(report.totals.totalSales),
-          Transactions: report.totals.transactionCount,
+          "Net Sales": money(report.totals.netSales),
+          "Gross Sales": money(report.totals.totalSales),
+          Returns: money(report.totals.totalReturns),
+          "Total Txn": report.totals.totalTransactionCount,
         },
       };
     }
@@ -116,13 +133,21 @@ async function buildExportData(
         subtitle: rangeSubtitle,
         columns: [
           { header: "Cashier", key: "cashierName", width: 140 },
-          { header: "Transactions", key: "transactionCount", align: "right", width: 72 },
-          { header: "Total Sales", key: "totalSales", align: "right", width: 88 },
+          { header: "Total Txn", key: "totalTransactionCount", align: "right", width: 56 },
+          { header: "Sales Txn", key: "transactionCount", align: "right", width: 56 },
+          { header: "Returns", key: "returnCount", align: "right", width: 56 },
+          { header: "Gross Sales", key: "totalSales", align: "right", width: 88 },
+          { header: "Sales Returns", key: "totalReturns", align: "right", width: 88 },
+          { header: "Net Sales", key: "netSales", align: "right", width: 88 },
         ],
         rows: report.rows.map((r) => ({
           cashierName: r.cashierName,
+          totalTransactionCount: r.totalTransactionCount,
           transactionCount: r.transactionCount,
+          returnCount: r.returnCount,
           totalSales: money(r.totalSales),
+          totalReturns: money(r.totalReturns),
+          netSales: money(r.netSales),
         })),
       };
     }
@@ -133,13 +158,77 @@ async function buildExportData(
         subtitle: rangeSubtitle,
         columns: [
           { header: "Method", key: "method", width: 100 },
-          { header: "Count", key: "transactionCount", align: "right", width: 56 },
-          { header: "Amount", key: "totalAmount", align: "right", width: 88 },
+          { header: "Total Txn", key: "transactionCount", align: "right", width: 56 },
+          { header: "Sales Txn", key: "saleCount", align: "right", width: 56 },
+          { header: "Returns", key: "returnCount", align: "right", width: 56 },
+          { header: "Gross Sales", key: "grossAmount", align: "right", width: 88 },
+          { header: "Sales Returns", key: "refundAmount", align: "right", width: 88 },
+          { header: "Net Amount", key: "netAmount", align: "right", width: 88 },
         ],
         rows: report.rows.map((r) => ({
           method: r.method,
           transactionCount: r.transactionCount,
-          totalAmount: money(r.totalAmount),
+          saleCount: r.saleCount,
+          returnCount: r.returnCount,
+          grossAmount: money(r.grossAmount),
+          refundAmount: money(r.refundAmount),
+          netAmount: money(r.netAmount),
+        })),
+      };
+    }
+    case "invoice-list": {
+      const report = await ReportService.getSalesInvoiceList(base, {
+        query: filters.query,
+        paymentMethod: filters.paymentMethod,
+      });
+      return {
+        title,
+        subtitle: rangeSubtitle,
+        columns: [
+          { header: "Invoice", key: "invoiceNumber", width: 96 },
+          { header: "Date", key: "saleDate", width: 72 },
+          { header: "Customer", key: "customerName", width: 120 },
+          { header: "Cashier", key: "cashierName", width: 120 },
+          { header: "Methods", key: "paymentMethods", width: 100 },
+          { header: "Tax", key: "taxAmount", align: "right", width: 80 },
+          { header: "Total", key: "grandTotal", align: "right", width: 88 },
+        ],
+        rows: report.rows.map((r) => ({
+          invoiceNumber: r.invoiceNumber,
+          saleDate: r.saleDate.toISOString().slice(0, 10),
+          customerName: r.customerName,
+          cashierName: r.cashierName,
+          paymentMethods: r.paymentMethods,
+          taxAmount: money(r.taxAmount),
+          grandTotal: money(r.grandTotal),
+        })),
+      };
+    }
+    case "return-list": {
+      const report = await ReportService.getReturnList(base, {
+        query: filters.query,
+        paymentMethod: filters.paymentMethod,
+      });
+      return {
+        title,
+        subtitle: rangeSubtitle,
+        columns: [
+          { header: "Return Invoice", key: "returnInvoiceNumber", width: 96 },
+          { header: "Original Invoice", key: "originalInvoiceNumber", width: 120 },
+          { header: "Date", key: "saleDate", width: 72 },
+          { header: "Cashier", key: "cashierName", width: 120 },
+          { header: "Methods", key: "paymentMethods", width: 100 },
+          { header: "Tax", key: "taxAmount", align: "right", width: 80 },
+          { header: "Refund", key: "refundAmount", align: "right", width: 88 },
+        ],
+        rows: report.rows.map((r) => ({
+          returnInvoiceNumber: r.returnInvoiceNumber,
+          originalInvoiceNumber: r.originalInvoiceNumber ?? r.originalSaleId ?? "-",
+          saleDate: r.saleDate.toISOString().slice(0, 10),
+          cashierName: r.cashierName,
+          paymentMethods: r.paymentMethods,
+          taxAmount: money(r.taxAmount),
+          refundAmount: money(r.refundAmount),
         })),
       };
     }
@@ -168,6 +257,14 @@ async function buildExportData(
     }
     case "tax-report": {
       const report = await ReportService.getTaxReport(base);
+      const netLabel = report.netTax >= 0 ? "Net Tax Payable" : "Net Tax Credit";
+      const byRateRows = report.outputByRate.flatMap((r) => [
+        { item: `${r.rateLabel} Sales Base`, amount: money(r.salesTaxableBase) },
+        { item: `${r.rateLabel} Sales VAT`, amount: money(r.salesTax) },
+        { item: `${r.rateLabel} Return Base`, amount: `-${money(r.returnTaxableBase)}` },
+        { item: `${r.rateLabel} Return VAT`, amount: `-${money(r.returnTax)}` },
+        { item: `${r.rateLabel} Net Output VAT`, amount: money(r.netOutputTax) },
+      ]);
       return {
         title,
         subtitle: rangeSubtitle,
@@ -176,10 +273,18 @@ async function buildExportData(
           { header: "Amount", key: "amount", align: "right", width: 100 },
         ],
         rows: [
-          { item: "Output Tax (Sales)", amount: money(report.outputTax) },
+          { item: "Sales Gross (excl. tax)", amount: money(report.salesGrossSubtotal) },
+          { item: "Sales Discounts", amount: `-${money(report.salesDiscount)}` },
+          { item: "Sales Taxable Base", amount: money(report.salesTaxableBase) },
+          { item: "Output VAT on Sales", amount: money(report.outputTaxSales) },
+          { item: "Sales Returns Gross (excl. tax)", amount: `-${money(report.returnGrossSubtotal)}` },
+          { item: "Return Taxable Base Reversal", amount: `-${money(report.returnTaxableBase)}` },
+          { item: "Output VAT Reversal (Returns)", amount: `-${money(report.outputTaxReturns)}` },
+          { item: "Net Output VAT", amount: money(report.netOutputTax) },
+          ...byRateRows,
           { item: "Input Tax (Purchases)", amount: money(report.inputTax) },
-          { item: "Net Tax Payable", amount: money(report.netTax) },
-          { item: "Sales Subtotal", amount: money(report.salesSubtotal) },
+          { item: netLabel, amount: money(Math.abs(report.netTax)) },
+          { item: "Net Taxable Sales", amount: money(report.netTaxableSales) },
           { item: "Purchase Subtotal", amount: money(report.purchaseSubtotal) },
         ],
       };

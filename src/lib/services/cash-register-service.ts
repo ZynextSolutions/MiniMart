@@ -89,9 +89,11 @@ export class CashRegisterService {
 
     let cashSales = new Decimal(0);
     for (const sale of session.sales) {
+      const direction = sale.saleType === "RETURN" ? -1 : 1;
       for (const payment of sale.payments) {
         if (payment.method === "CASH") {
-          cashSales = cashSales.add(payment.amount);
+          cashSales =
+            direction === 1 ? cashSales.add(payment.amount) : cashSales.sub(payment.amount);
         }
       }
     }
@@ -141,27 +143,47 @@ export class CashRegisterService {
     }
 
     let totalSales = new Decimal(0);
+    let returnTotal = new Decimal(0);
     let cashTotal = new Decimal(0);
+    let cashRefundTotal = new Decimal(0);
     let cardTotal = new Decimal(0);
     const paymentBreakdown: Record<string, number> = {};
 
     for (const sale of session.sales) {
-      totalSales = totalSales.add(sale.grandTotal);
+      if (sale.saleType === "RETURN") {
+        returnTotal = returnTotal.add(sale.grandTotal);
+      } else {
+        totalSales = totalSales.add(sale.grandTotal);
+      }
       for (const p of sale.payments) {
         const amt = Number(p.amount);
-        paymentBreakdown[p.method] = (paymentBreakdown[p.method] ?? 0) + amt;
-        if (p.method === "CASH") cashTotal = cashTotal.add(p.amount);
+        const signedAmt = sale.saleType === "RETURN" ? -amt : amt;
+        paymentBreakdown[p.method] = (paymentBreakdown[p.method] ?? 0) + signedAmt;
+        if (p.method === "CASH") {
+          if (sale.saleType === "RETURN") {
+            cashRefundTotal = cashRefundTotal.add(p.amount);
+          } else {
+            cashTotal = cashTotal.add(p.amount);
+          }
+        }
         if (p.method === "CARD") cardTotal = cardTotal.add(p.amount);
       }
     }
 
+    const netSales = totalSales.sub(returnTotal);
+    const netCash = cashTotal.sub(cashRefundTotal);
+
     return {
       transactionCount: session.sales.length,
       totalSales: Number(totalSales),
+      returnTotal: Number(returnTotal),
+      netSales: Number(netSales),
       cashTotal: Number(cashTotal),
+      cashRefundTotal: Number(cashRefundTotal),
+      netCash: Number(netCash),
       cardTotal: Number(cardTotal),
       paymentBreakdown,
-      expectedCash: Number(session.openingBalance.add(cashTotal)),
+      expectedCash: Number(session.openingBalance.add(netCash)),
       openingBalance: Number(session.openingBalance),
     };
   }

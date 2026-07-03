@@ -44,6 +44,17 @@ function saleWhere(filters: DashboardFilters, from: Date, to: Date): Prisma.Sale
   };
 }
 
+function returnWhere(filters: DashboardFilters, from: Date, to: Date): Prisma.SaleWhereInput {
+  return {
+    organizationId: filters.organizationId,
+    deletedAt: null,
+    status: "COMPLETED",
+    saleType: "RETURN",
+    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    saleDate: { gte: from, lte: to },
+  };
+}
+
 function warehouseWhere(filters: DashboardFilters): Prisma.WarehouseWhereInput {
   return {
     organizationId: filters.organizationId,
@@ -59,6 +70,7 @@ export class DashboardService {
 
     const [
       todaySales,
+      todayReturns,
       inventorySummary,
       expiringSoonCount,
       productCount,
@@ -67,6 +79,10 @@ export class DashboardService {
     ] = await Promise.all([
       prisma.sale.findMany({
         where: saleWhere(filters, today, todayEnd),
+        select: { grandTotal: true },
+      }),
+      prisma.sale.findMany({
+        where: returnWhere(filters, today, todayEnd),
         select: { grandTotal: true },
       }),
       InventoryQueryService.getSummary(filters.organizationId),
@@ -98,9 +114,12 @@ export class DashboardService {
     ]);
 
     const todaySalesTotal = todaySales.reduce((sum, s) => sum + toNum(s.grandTotal), 0);
+    const todayReturnsTotal = todayReturns.reduce((sum, s) => sum + toNum(s.grandTotal), 0);
+    const todayNetSales = todaySalesTotal - todayReturnsTotal;
     const todayTransactionCount = todaySales.length;
+    const todayReturnCount = todayReturns.length;
     const avgTransaction =
-      todayTransactionCount > 0 ? todaySalesTotal / todayTransactionCount : 0;
+      todayTransactionCount > 0 ? todayNetSales / todayTransactionCount : 0;
 
     const cashInRegister = openSessions.reduce(
       (sum, s) => sum + toNum(s.expectedCash ?? s.openingBalance),
@@ -109,7 +128,10 @@ export class DashboardService {
 
     return {
       todaySales: todaySalesTotal,
+      todayReturns: todayReturnsTotal,
+      todayNetSales,
       todayTransactionCount,
+      todayReturnCount,
       avgTransaction,
       lowStockCount: inventorySummary.lowStockCount,
       expiringSoonCount,
@@ -132,7 +154,7 @@ export class DashboardService {
       to,
     });
 
-    const byDate = new Map(report.rows.map((r) => [r.date, r.totalSales]));
+    const byDate = new Map(report.rows.map((r) => [r.date, r.netSales]));
     const rows: { date: string; label: string; sales: number }[] = [];
 
     for (let i = 0; i < days; i++) {

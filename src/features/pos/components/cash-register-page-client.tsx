@@ -28,7 +28,11 @@ export function CashRegisterPageClient({ session }: CashRegisterPageClientProps)
   const [summary, setSummary] = useState<{
     transactionCount: number;
     totalSales: number;
+    returnTotal: number;
+    netSales: number;
     cashTotal: number;
+    cashRefundTotal: number;
+    netCash: number;
     expectedCash: number;
   } | null>(null);
   const [closing, setClosing] = useState(false);
@@ -39,7 +43,11 @@ export function CashRegisterPageClient({ session }: CashRegisterPageClientProps)
     setSummary({
       transactionCount: data.transactionCount,
       totalSales: data.totalSales,
+      returnTotal: data.returnTotal,
+      netSales: data.netSales,
       cashTotal: data.cashTotal,
+      cashRefundTotal: data.cashRefundTotal,
+      netCash: data.netCash,
       expectedCash: data.expectedCash,
     });
   }
@@ -82,7 +90,7 @@ export function CashRegisterPageClient({ session }: CashRegisterPageClientProps)
         <Badge>{session.status}</Badge>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Opening Balance</CardTitle>
@@ -95,7 +103,7 @@ export function CashRegisterPageClient({ session }: CashRegisterPageClientProps)
           <>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Total Sales</CardTitle>
+                <CardTitle className="text-sm">Gross Sales</CardTitle>
               </CardHeader>
               <CardContent className="text-2xl font-bold">
                 {formatMoney(summary.totalSales)}
@@ -103,7 +111,23 @@ export function CashRegisterPageClient({ session }: CashRegisterPageClientProps)
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Expected Cash</CardTitle>
+                <CardTitle className="text-sm">Sales Returns</CardTitle>
+              </CardHeader>
+              <CardContent className="text-2xl font-bold text-amber-600">
+                -{formatMoney(summary.returnTotal)}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Net Sales</CardTitle>
+              </CardHeader>
+              <CardContent className="text-2xl font-bold">
+                {formatMoney(summary.netSales)}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Expected Drawer Cash</CardTitle>
               </CardHeader>
               <CardContent className="text-2xl font-bold">
                 {formatMoney(summary.expectedCash)}

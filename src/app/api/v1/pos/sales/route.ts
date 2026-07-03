@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         saleType: "SALE",
         status: "COMPLETED",
       },
-      include: { lines: true },
+      include: { lines: true, payments: true },
     });
 
     if (!sale) {

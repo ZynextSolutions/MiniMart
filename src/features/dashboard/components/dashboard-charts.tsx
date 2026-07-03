@@ -68,8 +68,8 @@ export function SalesTrendChart({
   return (
     <Card className="col-span-full lg:col-span-2">
       <CardHeader>
-        <CardTitle>Sales Trend</CardTitle>
-        <CardDescription>Daily sales over the last 30 days</CardDescription>
+        <CardTitle>Net Sales Trend</CardTitle>
+        <CardDescription>Daily net sales (sales minus returns) over 30 days</CardDescription>
       </CardHeader>
       <CardContent>
         {!hasData ? (

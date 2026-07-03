@@ -343,6 +343,7 @@ const returnSchema = z.object({
   cashRegisterId: z.string().uuid(),
   lines: z.array(returnLineSchema).min(1),
   payments: z.array(paymentSchema).min(1),
+  idempotencyKey: z.string().optional(),
   notes: z.string().optional(),
 });
 

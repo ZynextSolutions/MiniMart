@@ -65,6 +65,7 @@ export interface ReturnSaleDTO {
   originalSaleId: string;
   lines: { variantId: string; quantity: number; unitPrice: number; taxRate: number; productName: string; sku: string; costPrice: number }[];
   payments: PaymentDTO[];
+  idempotencyKey?: string;
   notes?: string;
 }
 
@@ -575,6 +576,14 @@ export class PosService {
   }
 
   static async processReturn(dto: ReturnSaleDTO) {
+    if (dto.idempotencyKey) {
+      const existing = await prisma.sale.findUnique({
+        where: { idempotencyKey: dto.idempotencyKey },
+        include: { payments: true, lines: true },
+      });
+      if (existing) return existing;
+    }
+
     await PosService.validateRegisterContext(dto);
 
     const original = await prisma.sale.findFirst({
@@ -616,8 +625,14 @@ export class PosService {
     }
 
     const originalByVariant = new Map(original.lines.map((l) => [l.variantId, l]));
+    const seenVariants = new Set<string>();
 
     const authoritativeLines = dto.lines.map((line) => {
+      if (seenVariants.has(line.variantId)) {
+        throw new ValidationError(`Duplicate return line for ${line.sku}`);
+      }
+      seenVariants.add(line.variantId);
+
       const orig = originalByVariant.get(line.variantId);
       if (!orig) {
         throw new ValidationError(`Variant not found on original sale: ${line.sku}`);
@@ -691,6 +706,7 @@ export class PosService {
           grandTotal: new Decimal(totals.grandTotal),
           amountPaid: new Decimal(totals.grandTotal),
           changeAmount: new Decimal(0),
+          idempotencyKey: dto.idempotencyKey,
           notes: dto.notes,
           lines: {
             create: authoritativeLines.map((line) => {

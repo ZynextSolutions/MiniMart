@@ -7,7 +7,14 @@ import { ReportService } from "@/features/reports/services/report.service";
 import { SalesReportClient } from "@/features/reports/components/sales-report-client";
 
 interface Props {
-  searchParams: Promise<{ view?: string; from?: string; to?: string; branchId?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    from?: string;
+    to?: string;
+    branchId?: string;
+    query?: string;
+    paymentMethod?: string;
+  }>;
 }
 
 function parseDateStart(date: string): Date {
@@ -29,6 +36,21 @@ export default async function SalesReportPage({ searchParams }: Props) {
   const from = params.from ?? monthStart;
   const to = params.to ?? today;
   const view = params.view ?? "daily";
+  const query = params.query ?? "";
+  const paymentMethod = params.paymentMethod ?? "";
+
+  if (
+    view === "invoices" &&
+    session.user.permissions?.includes(PERMISSIONS.REPORTS.SALES_INVOICE_LIST)
+  ) {
+    await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_INVOICE_LIST);
+  }
+  if (
+    view === "returns" &&
+    session.user.permissions?.includes(PERMISSIONS.REPORTS.SALES_RETURN_LIST)
+  ) {
+    await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_RETURN_LIST);
+  }
 
   const filters = {
     organizationId: session.user.organizationId,
@@ -39,13 +61,21 @@ export default async function SalesReportPage({ searchParams }: Props) {
 
   const branches = await BranchService.list(session.user.organizationId);
 
-  const [dailySales, byProduct, byCategory, byCashier, byPayment] = await Promise.all([
+  const [summary, dailySales, byProduct, byCategory, byCashier, byPayment, invoiceList, returnList] =
+    await Promise.all([
+      ReportService.getSalesNetSummary(filters),
     view === "daily" ? ReportService.getDailySales(filters) : Promise.resolve(undefined),
     view === "product" ? ReportService.getSalesByProduct(filters) : Promise.resolve(undefined),
     view === "category" ? ReportService.getSalesByCategory(filters) : Promise.resolve(undefined),
     view === "cashier" ? ReportService.getSalesByCashier(filters) : Promise.resolve(undefined),
     view === "payment" ? ReportService.getSalesByPaymentMethod(filters) : Promise.resolve(undefined),
-  ]);
+      view === "invoices"
+        ? ReportService.getSalesInvoiceList(filters, { query, paymentMethod })
+        : Promise.resolve(undefined),
+      view === "returns"
+        ? ReportService.getReturnList(filters, { query, paymentMethod })
+        : Promise.resolve(undefined),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -59,11 +89,16 @@ export default async function SalesReportPage({ searchParams }: Props) {
         from={from}
         to={to}
         branchId={params.branchId}
+        query={query}
+        paymentMethod={paymentMethod}
+        summary={summary}
         dailySales={dailySales}
         byProduct={byProduct}
         byCategory={byCategory}
         byCashier={byCashier}
         byPayment={byPayment}
+        invoiceList={invoiceList}
+        returnList={returnList}
       />
     </div>
   );
