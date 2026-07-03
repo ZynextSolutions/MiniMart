@@ -210,7 +210,7 @@ export class DashboardService {
     return report.rows.map((r) => ({
       method: r.method,
       label: formatPaymentMethod(r.method),
-      amount: r.totalAmount,
+      amount: r.netAmount,
       count: r.transactionCount,
     }));
   }
