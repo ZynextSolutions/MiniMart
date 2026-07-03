@@ -171,15 +171,21 @@ export async function completeSaleAction(input: z.infer<typeof completeSaleSchem
   }
 }
 
-export async function holdSaleAction(cartData: object, customerId?: string) {
+const holdCartSchema = z.object({
+  items: z.array(z.object({ variantId: z.string().uuid() })).min(1),
+  customerId: z.string().uuid().nullable().optional(),
+});
+
+export async function holdSaleAction(cartData: object) {
   try {
     const session = await requireBranchSession(PERMISSIONS.POS.SALE_HOLD);
+    const parsed = holdCartSchema.parse(cartData);
     const hold = await PosService.holdSale(
       session.user.organizationId,
       session.user.branchId!,
       session.user.id,
       cartData,
-      customerId,
+      parsed.customerId ?? undefined,
     );
     return { success: true, hold };
   } catch (e) {
@@ -195,7 +201,7 @@ export async function listHoldsAction() {
 export async function deleteHoldAction(id: string) {
   try {
     const session = await requireBranchSession(PERMISSIONS.POS.SALE_HOLD);
-    await PosService.deleteHold(id, session.user.organizationId);
+    await PosService.deleteHold(id, session.user.organizationId, session.user.branchId!);
     return { success: true };
   } catch (e) {
     return { success: false, error: getErrorMessage(e) };

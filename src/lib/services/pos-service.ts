@@ -491,6 +491,11 @@ export class PosService {
     cartData: unknown,
     customerId?: string,
   ) {
+    const snapshot = cartData as { items?: unknown[] };
+    if (!snapshot.items?.length) {
+      throw new ValidationError("Cannot hold an empty cart");
+    }
+
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
     const year = new Date().getFullYear();
@@ -538,9 +543,9 @@ export class PosService {
     });
   }
 
-  static async deleteHold(id: string, organizationId: string) {
+  static async deleteHold(id: string, organizationId: string, branchId: string) {
     const hold = await prisma.saleHold.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, branchId },
     });
     if (!hold) throw new NotFoundError("Held sale");
     await prisma.saleHold.delete({ where: { id } });

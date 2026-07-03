@@ -211,20 +211,20 @@ export const usePosCartStore = create<PosCartState>((set, get) => ({
     }),
 
   clear: () =>
-    set({
+    set((state) => ({
       items: [],
       customerId: null,
       customerName: null,
       couponCode: null,
       couponDiscount: 0,
       orderDiscount: null,
-      taxMode: "EXCLUSIVE",
+      taxMode: state.taxMode,
       selectedLineId: null,
       subtotal: 0,
       discountTotal: 0,
       taxTotal: 0,
       grandTotal: 0,
-    }),
+    })),
 
   loadCart: (data) => {
     set((state) => {

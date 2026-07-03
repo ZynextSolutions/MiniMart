@@ -28,6 +28,7 @@ export function HoldSalesDrawer({ open, onOpenChange }: HoldSalesDrawerProps) {
   const [holds, setHolds] = useState<HoldRow[]>([]);
   const [loading, setLoading] = useState(false);
   const loadCart = usePosCartStore((s) => s.loadCart);
+  const cartItems = usePosCartStore((s) => s.items);
 
   async function refresh() {
     setLoading(true);
@@ -41,22 +42,44 @@ export function HoldSalesDrawer({ open, onOpenChange }: HoldSalesDrawerProps) {
   }, [open]);
 
   async function handleResume(hold: HoldRow) {
+    if (cartItems.length > 0) {
+      const proceed = window.confirm(
+        "Your current cart will be replaced by the held sale. Continue?",
+      );
+      if (!proceed) return;
+    }
+
     const data = hold.cartData as {
       items: CartItem[];
-      customerId?: string;
-      customerName?: string;
-      couponCode?: string;
+      customerId?: string | null;
+      customerName?: string | null;
+      couponCode?: string | null;
       couponDiscount?: number;
       orderDiscount?: { type: "PERCENT" | "FIXED"; value: number } | null;
     };
+
+    if (!data.items?.length) {
+      toast.error("Held sale has no items");
+      return;
+    }
+
+    const result = await deleteHoldAction(hold.id);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to resume held sale");
+      return;
+    }
+
     loadCart(data);
-    await deleteHoldAction(hold.id);
     toast.success(`Resumed ${hold.holdNumber}`);
     onOpenChange(false);
   }
 
   async function handleDelete(id: string) {
-    await deleteHoldAction(id);
+    const result = await deleteHoldAction(id);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to delete hold");
+      return;
+    }
     toast.success("Hold removed");
     refresh();
   }

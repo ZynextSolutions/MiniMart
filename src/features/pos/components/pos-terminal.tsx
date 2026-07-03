@@ -50,7 +50,7 @@ export function PosTerminal({
   const addItem = usePosCartStore((s) => s.addItem);
   const clear = usePosCartStore((s) => s.clear);
   const getSnapshot = usePosCartStore((s) => s.getSnapshot);
-  const customerId = usePosCartStore((s) => s.customerId);
+  const items = usePosCartStore((s) => s.items);
   const lastSaleId = usePosCartStore((s) => s.lastSaleId);
   const setLastSaleId = usePosCartStore((s) => s.setLastSaleId);
   const setTaxMode = usePosCartStore((s) => s.setTaxMode);
@@ -86,14 +86,18 @@ export function PosTerminal({
   }, [initialSessionId, initialRegisterId]);
 
   const handleHold = useCallback(async () => {
-    const result = await holdSaleAction(getSnapshot(), customerId ?? undefined);
+    if (items.length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
+    const result = await holdSaleAction(getSnapshot());
     if (result.success) {
       toast.success(`Sale held: ${result.hold?.holdNumber}`);
       clear();
     } else {
       toast.error(result.error);
     }
-  }, [getSnapshot, customerId, clear]);
+  }, [getSnapshot, items.length, clear]);
 
   // Keyboard shortcuts
   useEffect(() => {

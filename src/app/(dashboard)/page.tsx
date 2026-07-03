@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
+import { resolveLandingPath } from "@/lib/auth/landing-path";
 import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { DashboardService } from "@/features/dashboard/services/dashboard.service";
@@ -13,7 +14,18 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  await authorize(session.user.id, PERMISSIONS.REPORTS.DASHBOARD);
+
+  const canViewDashboard = session.user.permissions?.includes(
+    PERMISSIONS.REPORTS.DASHBOARD,
+  );
+  if (!canViewDashboard) {
+    const landing = resolveLandingPath(session.user.permissions);
+    redirect(landing ?? "/login?error=AccessDenied");
+  }
+
+  await authorize(session.user.id, PERMISSIONS.REPORTS.DASHBOARD, {
+    branchId: session.user.branchId ?? undefined,
+  });
 
   const filters = {
     organizationId: session.user.organizationId,

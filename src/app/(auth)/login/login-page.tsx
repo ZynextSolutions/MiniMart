@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Store, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { resolveLandingPath } from "@/lib/auth/landing-path";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -78,7 +79,11 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(safeCallbackUrl);
+      const session = await getSession();
+      const destination =
+        resolveLandingPath(session?.user?.permissions, safeCallbackUrl) ?? "/pos";
+
+      router.push(destination);
       router.refresh();
     } catch {
       toast.error("An error occurred. Please try again.");
@@ -142,7 +147,7 @@ export default function LoginPage() {
           </form>
         </Form>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Default: admin@minimart.com / Admin@123
+          Default: admin@minimart.com / Admin@123 · Cashier: cashier@minimart.com / Admin@123
         </p>
       </CardContent>
     </Card>
