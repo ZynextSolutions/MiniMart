@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize, can } from "@/lib/permissions/authorization";
+import { requireBranchSession, authorizeSession } from "@/lib/auth/session";
+import { can } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { getErrorMessage, ForbiddenError, ValidationError } from "@/lib/errors/app-error";
 import { PosService } from "@/lib/services/pos-service";
@@ -64,7 +64,7 @@ const MAX_STANDARD_DISCOUNT_PERCENT = 50;
 
 async function assertDiscountPermissions(
   userId: string,
-  branchId: string | null,
+  branchId: string,
   lines: z.infer<typeof lineSchema>[],
   orderDiscount: z.infer<typeof discountSchema>,
 ) {
@@ -73,7 +73,7 @@ async function assertDiscountPermissions(
 
   if (!hasLineDiscount && !hasOrderDiscount) return;
 
-  const context = branchId ? { branchId } : undefined;
+  const context = { branchId };
   const hasDiscountPermission = await can(
     userId,
     PERMISSIONS.POS.SALE_DISCOUNT,
@@ -106,15 +106,13 @@ async function assertDiscountPermissions(
 }
 
 export async function lookupBarcodeAction(code: string) {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.POS.ACCESS);
+  const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
   return PosService.lookupByBarcode(session.user.organizationId, code);
 }
 
 export async function validateCouponAction(code: string, subtotal: number) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.POS.COUPON_APPLY);
+    const session = await requireBranchSession(PERMISSIONS.POS.COUPON_APPLY);
     const result = await PosService.validateCoupon(
       session.user.organizationId,
       code,
@@ -128,8 +126,7 @@ export async function validateCouponAction(code: string, subtotal: number) {
 
 export async function validateGiftCardAction(code: string, amount: number) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.POS.GIFT_CARD_REDEEM);
+    const session = await requireBranchSession(PERMISSIONS.POS.GIFT_CARD_REDEEM);
     const card = await PosService.validateGiftCard(
       session.user.organizationId,
       code,
@@ -143,24 +140,27 @@ export async function validateGiftCardAction(code: string, amount: number) {
 
 export async function completeSaleAction(input: z.infer<typeof completeSaleSchema>) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.POS.SALE_CREATE);
+    const session = await requireBranchSession(PERMISSIONS.POS.SALE_CREATE);
+    const data = completeSaleSchema.parse(input);
 
-    if (!session.user.branchId) {
-      return { success: false, error: "No branch selected" };
+    if (data.couponCode) {
+      await authorizeSession(session, PERMISSIONS.POS.COUPON_APPLY);
+    }
+    if (data.payments.some((p) => p.method === "GIFT_CARD")) {
+      await authorizeSession(session, PERMISSIONS.POS.GIFT_CARD_REDEEM);
     }
 
-    const data = completeSaleSchema.parse(input);
     await assertDiscountPermissions(
       session.user.id,
-      session.user.branchId,
+      session.user.branchId!,
       data.lines,
       data.orderDiscount,
     );
+
     const sale = await PosService.completeSale({
       ...data,
       organizationId: session.user.organizationId,
-      branchId: session.user.branchId,
+      branchId: session.user.branchId!,
       userId: session.user.id,
     });
 
@@ -173,16 +173,10 @@ export async function completeSaleAction(input: z.infer<typeof completeSaleSchem
 
 export async function holdSaleAction(cartData: object, customerId?: string) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.POS.SALE_HOLD);
-
-    if (!session.user.branchId) {
-      return { success: false, error: "No branch selected" };
-    }
-
+    const session = await requireBranchSession(PERMISSIONS.POS.SALE_HOLD);
     const hold = await PosService.holdSale(
       session.user.organizationId,
-      session.user.branchId,
+      session.user.branchId!,
       session.user.id,
       cartData,
       customerId,
@@ -194,16 +188,13 @@ export async function holdSaleAction(cartData: object, customerId?: string) {
 }
 
 export async function listHoldsAction() {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.POS.SALE_HOLD);
-  if (!session.user.branchId) return [];
-  return PosService.listHolds(session.user.organizationId, session.user.branchId);
+  const session = await requireBranchSession(PERMISSIONS.POS.SALE_HOLD);
+  return PosService.listHolds(session.user.organizationId, session.user.branchId!);
 }
 
 export async function deleteHoldAction(id: string) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.POS.SALE_HOLD);
+    const session = await requireBranchSession(PERMISSIONS.POS.SALE_HOLD);
     await PosService.deleteHold(id, session.user.organizationId);
     return { success: true };
   } catch (e) {
@@ -212,14 +203,12 @@ export async function deleteHoldAction(id: string) {
 }
 
 export async function getSaleAction(id: string) {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.POS.ACCESS);
+  const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
   return PosService.getSale(id, session.user.organizationId);
 }
 
 export async function getReceiptHtmlAction(saleId: string, width: "58" | "80" = "80") {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.POS.ACCESS);
+  const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
 
   const sale = await PosService.getSale(saleId, session.user.organizationId);
   const org = await prisma.organization.findUnique({
@@ -275,8 +264,7 @@ export async function openRegisterSessionAction(
   openingBalance: number,
 ) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.CASH_REGISTER.OPEN);
+    const session = await requireBranchSession(PERMISSIONS.CASH_REGISTER.OPEN);
     const regSession = await CashRegisterService.openSession(
       cashRegisterId,
       openingBalance,
@@ -295,9 +283,8 @@ export async function closeRegisterSessionAction(
   closingBalance: number,
 ) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.CASH_REGISTER.CLOSE);
-    const closed = await CashRegisterService.closeSession(
+    const session = await requireBranchSession(PERMISSIONS.CASH_REGISTER.CLOSE);
+    await CashRegisterService.closeSession(
       sessionId,
       closingBalance,
       session.user.id,
@@ -312,10 +299,8 @@ export async function closeRegisterSessionAction(
 }
 
 export async function listRegistersAction() {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.CASH_REGISTER.VIEW);
-  if (!session.user.branchId) return [];
-  const registers = await CashRegisterService.listRegisters(session.user.branchId);
+  const session = await requireBranchSession(PERMISSIONS.CASH_REGISTER.VIEW);
+  const registers = await CashRegisterService.listRegisters(session.user.branchId!);
   return registers.map((register) => ({
     id: register.id,
     code: register.code,
@@ -330,8 +315,7 @@ export async function listRegistersAction() {
 }
 
 export async function getRegisterSessionSummaryAction(sessionId: string) {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.CASH_REGISTER.VIEW);
+  const session = await requireBranchSession(PERMISSIONS.CASH_REGISTER.VIEW);
   return CashRegisterService.getSessionSummary(sessionId, session.user.organizationId);
 }
 
@@ -357,18 +341,12 @@ const returnSchema = z.object({
 
 export async function processReturnAction(input: z.infer<typeof returnSchema>) {
   try {
-    const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.POS.SALE_RETURN);
-
-    if (!session.user.branchId) {
-      return { success: false, error: "No branch selected" };
-    }
-
+    const session = await requireBranchSession(PERMISSIONS.POS.SALE_RETURN);
     const data = returnSchema.parse(input);
     const sale = await PosService.processReturn({
       ...data,
       organizationId: session.user.organizationId,
-      branchId: session.user.branchId,
+      branchId: session.user.branchId!,
       userId: session.user.id,
     });
 
@@ -380,8 +358,7 @@ export async function processReturnAction(input: z.infer<typeof returnSchema>) {
 }
 
 export async function searchCustomersAction(query: string) {
-  const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.POS.ACCESS);
+  const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
   if (!query.trim()) return [];
 
   return prisma.customer.findMany({

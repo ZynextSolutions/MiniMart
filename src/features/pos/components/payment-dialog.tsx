@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,15 @@ export function PaymentDialog({
   const [cardAmount, setCardAmount] = useState("");
   const [reference, setReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      idempotencyKeyRef.current = `sale-${crypto.randomUUID()}`;
+    } else {
+      idempotencyKeyRef.current = null;
+    }
+  }, [open]);
 
   const grandTotal = cart.grandTotal;
   const change =
@@ -58,7 +67,15 @@ export function PaymentDialog({
       : 0;
 
   async function handleComplete() {
+    if (submitting) return;
     setSubmitting(true);
+
+    const idempotencyKey = idempotencyKeyRef.current;
+    if (!idempotencyKey) {
+      toast.error("Payment session expired. Close and reopen the dialog.");
+      setSubmitting(false);
+      return;
+    }
 
     const payments: { method: PaymentMethod; amount: number; reference?: string }[] = [];
 
@@ -108,7 +125,7 @@ export function PaymentDialog({
         costPrice: i.costPrice,
       })),
       payments,
-      idempotencyKey: `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      idempotencyKey,
     });
 
     setSubmitting(false);

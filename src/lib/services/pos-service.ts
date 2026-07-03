@@ -454,14 +454,18 @@ export class PosService {
         }
       }
 
-      await AuditService.log({
-        organizationId: dto.organizationId,
-        userId: dto.userId,
-        action: "pos.sale.completed",
-        entityType: "Sale",
-        entityId: sale.id,
-        after: { invoiceNumber, grandTotal: totals.grandTotal },
-      });
+      await AuditService.log(
+        {
+          organizationId: dto.organizationId,
+          userId: dto.userId,
+          branchId: dto.branchId,
+          action: "pos.sale.completed",
+          entityType: "Sale",
+          entityId: sale.id,
+          after: { invoiceNumber, grandTotal: totals.grandTotal },
+        },
+        tx,
+      );
 
       return sale;
     });
@@ -732,14 +736,18 @@ export class PosService {
         payments: dto.payments,
       });
 
-      await AuditService.log({
-        organizationId: dto.organizationId,
-        userId: dto.userId,
-        action: "pos.sale.return",
-        entityType: "Sale",
-        entityId: sale.id,
-        after: { originalSaleId: dto.originalSaleId, grandTotal: totals.grandTotal },
-      });
+      await AuditService.log(
+        {
+          organizationId: dto.organizationId,
+          userId: dto.userId,
+          branchId: dto.branchId,
+          action: "pos.sale.return",
+          entityType: "Sale",
+          entityId: sale.id,
+          after: { originalSaleId: dto.originalSaleId, grandTotal: totals.grandTotal },
+        },
+        tx,
+      );
 
       return sale;
     });

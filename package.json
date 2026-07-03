@@ -9,6 +9,7 @@
     "lint": "next lint",
     "test": "vitest",
     "test:ci": "vitest run",
+    "test:integration": "INTEGRATION_TEST=true vitest run --config vitest.integration.config.ts",
     "validate:env": "tsx scripts/validate-env.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

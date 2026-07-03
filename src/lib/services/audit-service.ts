@@ -15,8 +15,12 @@ export interface AuditLogInput {
 }
 
 export class AuditService {
-  static async log(input: AuditLogInput): Promise<void> {
-    await prisma.auditLog.create({
+  static async log(
+    input: AuditLogInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? prisma;
+    await client.auditLog.create({
       data: {
         organizationId: input.organizationId,
         userId: input.userId ?? null,
