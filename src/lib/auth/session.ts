@@ -1,11 +1,12 @@
+import type { Session } from "next-auth";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/infrastructure/database/prisma";
 import { UnauthorizedError, ValidationError } from "@/lib/errors/app-error";
 import { authorize } from "@/lib/permissions/authorization";
 import type { Permission } from "@/lib/permissions/permissions";
 
-type AuthSession = NonNullable<Awaited<ReturnType<typeof auth>>> & {
-  user: NonNullable<NonNullable<Awaited<ReturnType<typeof auth>>>["user"]>;
+export type AuthSession = Session & {
+  user: NonNullable<Session["user"]>;
 };
 
 async function assertActiveUser(userId: string) {
@@ -19,14 +20,14 @@ async function assertActiveUser(userId: string) {
   }
 }
 
-export async function requireSession() {
+export async function requireSession(): Promise<AuthSession> {
   const session = await auth();
   if (!session?.user?.id || session.error) {
     throw new UnauthorizedError();
   }
 
   await assertActiveUser(session.user.id);
-  return session;
+  return session as AuthSession;
 }
 
 export async function requireOrganizationId() {
@@ -61,7 +62,9 @@ export async function authorizeSession(
   });
 }
 
-export async function requireBranchSession(permission: Permission | string) {
+export async function requireBranchSession(
+  permission: Permission | string,
+): Promise<AuthSession> {
   const session = await requireSession();
   await authorizeSession(session, permission);
   return session;
