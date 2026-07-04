@@ -19,8 +19,9 @@ function isUpstashConfigured(): boolean {
 
 function assertProductionRateLimiter(): void {
   if (isProduction() && !isUpstashConfigured()) {
-    throw new Error(
-      "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production",
+    console.warn(
+      "[rate-limit] UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not set; " +
+        "using in-memory rate limiting (fine for single-instance dev; configure Upstash for production).",
     );
   }
 }

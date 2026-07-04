@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+function resolveServerEnv() {
+  const authUrl =
+    process.env.AUTH_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+
+  const directUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+
+  return {
+    DATABASE_URL: process.env.DATABASE_URL,
+    DIRECT_URL: directUrl,
+    AUTH_SECRET: process.env.AUTH_SECRET,
+    AUTH_URL: authUrl,
+    NODE_ENV: process.env.NODE_ENV,
+  };
+}
+
 const serverEnvSchema = z
   .object({
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
@@ -22,7 +38,8 @@ const serverEnvSchema = z
       if (!data.AUTH_URL) {
         ctx.addIssue({
           code: "custom",
-          message: "AUTH_URL is required in production",
+          message:
+            "AUTH_URL is required in production (set AUTH_URL or deploy on Vercel with VERCEL_URL)",
           path: ["AUTH_URL"],
         });
       }
@@ -36,7 +53,7 @@ let cached: ServerEnv | undefined;
 export function validateEnv(): ServerEnv {
   if (cached) return cached;
 
-  const parsed = serverEnvSchema.safeParse(process.env);
+  const parsed = serverEnvSchema.safeParse(resolveServerEnv());
   if (!parsed.success) {
     const formatted = parsed.error.flatten().fieldErrors;
     console.error("Invalid environment variables:", formatted);
