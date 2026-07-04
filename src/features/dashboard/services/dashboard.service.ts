@@ -1,12 +1,18 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ReportService } from "@/features/reports/services/report.service";
 import { InventoryQueryService } from "@/features/inventory/services/inventory-query.service";
+import type { BranchFilter } from "@/lib/auth/branch-access";
 import type { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
 export interface DashboardFilters {
   organizationId: string;
-  branchId?: string;
+  branchId?: BranchFilter;
+}
+
+function branchWhere(branchId?: BranchFilter): { branchId?: BranchFilter } {
+  if (!branchId) return {};
+  return { branchId };
 }
 
 function toNum(v: Decimal | number | null | undefined): number {
@@ -39,7 +45,7 @@ function saleWhere(filters: DashboardFilters, from: Date, to: Date): Prisma.Sale
     deletedAt: null,
     status: "COMPLETED",
     saleType: "SALE",
-    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    ...branchWhere(filters.branchId),
     saleDate: { gte: from, lte: to },
   };
 }
@@ -50,7 +56,7 @@ function returnWhere(filters: DashboardFilters, from: Date, to: Date): Prisma.Sa
     deletedAt: null,
     status: "COMPLETED",
     saleType: "RETURN",
-    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    ...branchWhere(filters.branchId),
     saleDate: { gte: from, lte: to },
   };
 }
@@ -59,7 +65,7 @@ function warehouseWhere(filters: DashboardFilters): Prisma.WarehouseWhereInput {
   return {
     organizationId: filters.organizationId,
     deletedAt: null,
-    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    ...branchWhere(filters.branchId),
   };
 }
 
@@ -106,7 +112,7 @@ export class DashboardService {
           status: "OPEN",
           cashRegister: {
             branch: { organizationId: filters.organizationId },
-            ...(filters.branchId ? { branchId: filters.branchId } : {}),
+            ...branchWhere(filters.branchId),
           },
         },
         select: { expectedCash: true, openingBalance: true },
@@ -222,7 +228,7 @@ export class DashboardService {
         deletedAt: null,
         status: "COMPLETED",
         saleType: "SALE",
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...branchWhere(filters.branchId),
       },
       orderBy: { saleDate: "desc" },
       take: limit,

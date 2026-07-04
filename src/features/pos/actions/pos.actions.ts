@@ -365,6 +365,28 @@ export async function processReturnAction(input: z.infer<typeof returnSchema>) {
   }
 }
 
+export async function voidSaleAction(input: {
+  saleId: string;
+  warehouseId: string;
+  reason?: string;
+}) {
+  try {
+    const session = await requireBranchSession(PERMISSIONS.POS.SALE_VOID);
+    await PosService.voidSale({
+      saleId: input.saleId,
+      warehouseId: input.warehouseId,
+      reason: input.reason,
+      organizationId: session.user.organizationId,
+      branchId: session.user.branchId!,
+      userId: session.user.id,
+    });
+    revalidatePath("/pos");
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: getErrorMessage(e) };
+  }
+}
+
 export async function searchCustomersAction(query: string) {
   const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
   if (!query.trim()) return [];

@@ -1,6 +1,7 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { AuditService } from "@/lib/services/audit-service";
+import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 
 export class BranchService {
   static async list(organizationId: string) {
@@ -29,6 +30,8 @@ export class BranchService {
       where: { organizationId: data.organizationId, code: data.code, deletedAt: null },
     });
     if (existing) throw new ConflictError("Branch code already exists");
+
+    await PlanLimitsService.checkLimit(data.organizationId, "maxBranches");
 
     return prisma.$transaction(async (tx) => {
       if (data.isDefault) {

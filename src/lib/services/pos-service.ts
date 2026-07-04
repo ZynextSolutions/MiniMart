@@ -170,7 +170,7 @@ export class PosService {
 
   static async lookupByBarcode(organizationId: string, code: string) {
     const barcode = await prisma.productBarcode.findFirst({
-      where: { code },
+      where: { organizationId, code },
       include: {
         product: {
           include: {
@@ -267,8 +267,11 @@ export class PosService {
     if (dto.lines.length === 0) throw new ValidationError("Cart is empty");
 
     if (dto.idempotencyKey) {
-      const existing = await prisma.sale.findUnique({
-        where: { idempotencyKey: dto.idempotencyKey },
+      const existing = await prisma.sale.findFirst({
+        where: {
+          organizationId: dto.organizationId,
+          idempotencyKey: dto.idempotencyKey,
+        },
         include: { payments: true, lines: true },
       });
       if (existing) return existing;
@@ -577,8 +580,11 @@ export class PosService {
 
   static async processReturn(dto: ReturnSaleDTO) {
     if (dto.idempotencyKey) {
-      const existing = await prisma.sale.findUnique({
-        where: { idempotencyKey: dto.idempotencyKey },
+      const existing = await prisma.sale.findFirst({
+        where: {
+          organizationId: dto.organizationId,
+          idempotencyKey: dto.idempotencyKey,
+        },
         include: { payments: true, lines: true },
       });
       if (existing) return existing;
@@ -764,6 +770,9 @@ export class PosService {
         grandTotal: totals.grandTotal,
         totalCogs: Number(totalCogs),
         payments: dto.payments,
+        idempotencyKey: dto.idempotencyKey
+          ? `journal-return-${dto.idempotencyKey}`
+          : undefined,
       });
 
       await AuditService.log(
@@ -792,5 +801,105 @@ export class PosService {
     }).catch(() => {});
 
     return sale;
+  }
+
+  static async voidSale(dto: {
+    saleId: string;
+    organizationId: string;
+    branchId: string;
+    warehouseId: string;
+    userId: string;
+    reason?: string;
+  }) {
+    const sale = await prisma.sale.findFirst({
+      where: {
+        id: dto.saleId,
+        organizationId: dto.organizationId,
+        branchId: dto.branchId,
+        saleType: "SALE",
+        status: "COMPLETED",
+        deletedAt: null,
+      },
+      include: { lines: true, payments: true },
+    });
+    if (!sale) throw new NotFoundError("Sale");
+
+    return prisma.$transaction(async (tx) => {
+      await tx.sale.update({
+        where: { id: sale.id },
+        data: { status: "VOID", notes: dto.reason ?? sale.notes },
+      });
+
+      const { totalCogs } = await InventoryService.processReturnRestock(tx, {
+        warehouseId: dto.warehouseId,
+        saleId: sale.id,
+        organizationId: dto.organizationId,
+        branchId: dto.branchId,
+        userId: dto.userId,
+        lines: sale.lines.map((l) => ({
+          variantId: l.variantId,
+          quantity: Number(l.quantity),
+          unitCost: Number(l.costPrice),
+        })),
+      });
+
+      await AccountingEngine.postSaleReturn(tx, {
+        organizationId: dto.organizationId,
+        branchId: dto.branchId,
+        userId: dto.userId,
+        saleId: sale.id,
+        saleDate: new Date(),
+        subtotal: Number(sale.subtotal),
+        discountAmount: Number(sale.discountAmount),
+        taxAmount: Number(sale.taxAmount),
+        grandTotal: Number(sale.grandTotal),
+        totalCogs: Number(totalCogs),
+        payments: sale.payments.map((p) => ({
+          method: p.method,
+          amount: Number(p.amount),
+          reference: p.reference ?? undefined,
+        })),
+      });
+
+      await AuditService.log(
+        {
+          organizationId: dto.organizationId,
+          userId: dto.userId,
+          branchId: dto.branchId,
+          action: "pos.sale.void",
+          entityType: "Sale",
+          entityId: sale.id,
+          after: { status: "VOID" },
+        },
+        tx,
+      );
+
+      return sale;
+    });
+  }
+
+  static async processExchange(dto: ReturnSaleDTO & {
+    newLines: CompleteSaleDTO["lines"];
+    newPayments: CompleteSaleDTO["payments"];
+  }) {
+    const returnSale = await this.processReturn({
+      ...dto,
+      lines: dto.lines,
+      payments: dto.payments,
+    });
+
+    const exchangeSale = await this.completeSale({
+      organizationId: dto.organizationId,
+      branchId: dto.branchId,
+      warehouseId: dto.warehouseId,
+      userId: dto.userId,
+      sessionId: dto.sessionId,
+      cashRegisterId: dto.cashRegisterId,
+      lines: dto.newLines,
+      payments: dto.newPayments,
+      notes: `Exchange for ${returnSale.invoiceNumber}`,
+    });
+
+    return { returnSale, exchangeSale };
   }
 }

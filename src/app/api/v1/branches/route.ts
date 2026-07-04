@@ -7,7 +7,7 @@ import { enforceApiRateLimit } from "@/lib/rate-limit";
 export async function GET(request: Request) {
   try {
     await enforceApiRateLimit(request, "branches", 60);
-    const session = await requireApiSession();
+    const session = await requireApiSession({ skipSubscriptionCheck: true });
     const branches = await getUserBranches(session.user.id);
     return NextResponse.json(branches);
   } catch (error) {

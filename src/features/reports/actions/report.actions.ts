@@ -1,6 +1,7 @@
 "use server";
 
 import { requireSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService, type ReportFilters } from "@/features/reports/services/report.service";
@@ -13,7 +14,7 @@ function parseFilters(
   const monthStart = `${today.slice(0, 8)}01`;
   return {
     organizationId: session.user.organizationId,
-    branchId: params.branchId,
+    branchId: resolveSessionBranchFilter(session.user, params.branchId),
     from: new Date(params.from ?? monthStart),
     to: new Date(params.to ?? today),
     page: params.page,
@@ -94,7 +95,7 @@ export async function getInventoryStockReportAction(params: {
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   return ReportService.getStockOnHand({
     organizationId: session.user.organizationId,
-    branchId: params.branchId,
+    branchId: resolveSessionBranchFilter(session.user, params.branchId),
     from: monthStart,
     to: today,
     warehouseId: params.warehouseId,

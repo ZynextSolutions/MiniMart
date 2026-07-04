@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { resolveLandingPath } from "@/lib/auth/landing-path";
 import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { DashboardService } from "@/features/dashboard/services/dashboard.service";
 import { DashboardClient } from "@/features/dashboard/components/dashboard-client";
 
@@ -29,7 +30,7 @@ export default async function DashboardPage() {
 
   const filters = {
     organizationId: session.user.organizationId,
-    branchId: session.user.branchId ?? undefined,
+    branchId: resolveSessionBranchFilter(session.user),
   };
 
   const [kpis, salesTrend, topProducts, paymentBreakdown, recentTransactions, lowStockAlerts, expiryWarnings] =

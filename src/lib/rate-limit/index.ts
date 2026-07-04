@@ -7,9 +7,31 @@ import type { RateLimitOptions, RateLimitResult } from "./types";
 export type { RateLimitOptions, RateLimitResult };
 export { getClientIp };
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function isUpstashConfigured(): boolean {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+  );
+}
+
+function assertProductionRateLimiter(): void {
+  if (isProduction() && !isUpstashConfigured()) {
+    throw new Error(
+      "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production",
+    );
+  }
+}
+
 export async function rateLimit(options: RateLimitOptions): Promise<RateLimitResult> {
-  const upstashResult = await checkUpstashRateLimit(options);
-  if (upstashResult) return upstashResult;
+  assertProductionRateLimiter();
+
+  if (isUpstashConfigured()) {
+    return checkUpstashRateLimit(options);
+  }
+
   return checkMemoryRateLimit(options);
 }
 
@@ -45,6 +67,22 @@ export async function enforceLoginRateLimit(email: string, ip: string): Promise<
   await enforceRateLimit({
     key: `login:email:${email.toLowerCase()}`,
     limit: 10,
+    windowMs: 15 * 60_000,
+  });
+}
+
+export async function enforceSignupRateLimit(ip: string): Promise<void> {
+  await enforceRateLimit({
+    key: `signup:ip:${ip}`,
+    limit: 5,
+    windowMs: 60 * 60_000,
+  });
+}
+
+export async function enforceInviteRateLimit(ip: string): Promise<void> {
+  await enforceRateLimit({
+    key: `invite:ip:${ip}`,
+    limit: 30,
     windowMs: 15 * 60_000,
   });
 }

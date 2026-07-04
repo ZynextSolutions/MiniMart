@@ -68,6 +68,13 @@ export class InsufficientStockError extends AppError {
   }
 }
 
+export class PlanLimitExceededError extends AppError {
+  constructor(message: string) {
+    super(message, "PLAN_LIMIT_EXCEEDED", 402);
+    this.name = "PlanLimitExceededError";
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }

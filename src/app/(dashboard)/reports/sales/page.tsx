@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorize, can, getUserBranches } from "@/lib/permissions/authorization";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-import { BranchService } from "@/features/branches/services/branch.service";
 import { ReportService } from "@/features/reports/services/report.service";
 import { SalesReportClient } from "@/features/reports/components/sales-report-client";
 
@@ -39,27 +39,26 @@ export default async function SalesReportPage({ searchParams }: Props) {
   const query = params.query ?? "";
   const paymentMethod = params.paymentMethod ?? "";
 
-  if (
-    view === "invoices" &&
-    session.user.permissions?.includes(PERMISSIONS.REPORTS.SALES_INVOICE_LIST)
-  ) {
+  if (view === "invoices") {
     await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_INVOICE_LIST);
   }
-  if (
-    view === "returns" &&
-    session.user.permissions?.includes(PERMISSIONS.REPORTS.SALES_RETURN_LIST)
-  ) {
+  if (view === "returns") {
     await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_RETURN_LIST);
   }
 
   const filters = {
     organizationId: session.user.organizationId,
-    branchId: params.branchId,
+    branchId: resolveSessionBranchFilter(session.user, params.branchId),
     from: parseDateStart(from),
     to: parseDateEnd(to),
   };
 
-  const branches = await BranchService.list(session.user.organizationId);
+  const branches = await getUserBranches(session.user.id);
+
+  const [canViewInvoices, canViewReturns] = await Promise.all([
+    can(session.user.id, PERMISSIONS.REPORTS.SALES_INVOICE_LIST),
+    can(session.user.id, PERMISSIONS.REPORTS.SALES_RETURN_LIST),
+  ]);
 
   const [summary, dailySales, byProduct, byCategory, byCashier, byPayment, invoiceList, returnList] =
     await Promise.all([
@@ -91,6 +90,8 @@ export default async function SalesReportPage({ searchParams }: Props) {
         branchId={params.branchId}
         query={query}
         paymentMethod={paymentMethod}
+        canViewInvoices={canViewInvoices}
+        canViewReturns={canViewReturns}
         summary={summary}
         dailySales={dailySales}
         byProduct={byProduct}

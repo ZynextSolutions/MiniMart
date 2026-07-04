@@ -2,6 +2,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors/app-error";
 import { assertRoleAssignable } from "@/lib/permissions/role-guards";
 import { AuditService } from "@/lib/services/audit-service";
+import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 import type { Prisma } from "@prisma/client";
 
 export interface ListUsersParams {
@@ -121,6 +122,8 @@ export class UserService {
     });
 
     if (existing) throw new ConflictError("Email already in use");
+
+    await PlanLimitsService.checkLimit(data.organizationId, "maxUsers");
 
     const user = await prisma.$transaction(async (tx) => {
       await this.validateBranchRoles(tx, data.organizationId, data.branchRoles);

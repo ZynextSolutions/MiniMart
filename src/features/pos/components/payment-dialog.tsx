@@ -34,7 +34,7 @@ interface PaymentDialogProps {
   onComplete: (saleId: string) => void;
 }
 
-type PayMode = "CASH" | "CARD" | "QR" | "BANK_TRANSFER" | "CREDIT" | "MIXED";
+type PayMode = "CASH" | "CARD" | "QR" | "BANK_TRANSFER" | "CREDIT" | "MIXED" | "GIFT_CARD";
 
 export function PaymentDialog({
   open,
@@ -49,6 +49,7 @@ export function PaymentDialog({
   const [cashReceived, setCashReceived] = useState("");
   const [cardAmount, setCardAmount] = useState("");
   const [reference, setReference] = useState("");
+  const [giftCardCode, setGiftCardCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -99,6 +100,17 @@ export function PaymentDialog({
       }
       if (cash > 0) payments.push({ method: "CASH", amount: cash });
       if (card > 0) payments.push({ method: "CARD", amount: card, reference });
+    } else if (mode === "GIFT_CARD") {
+      if (!giftCardCode.trim()) {
+        toast.error("Gift card code required");
+        setSubmitting(false);
+        return;
+      }
+      payments.push({
+        method: "GIFT_CARD",
+        amount: grandTotal,
+        reference: giftCardCode.trim().toUpperCase(),
+      });
     } else {
       if ((mode === "QR" || mode === "BANK_TRANSFER") && !reference) {
         toast.error("Reference required");
@@ -163,6 +175,7 @@ export function PaymentDialog({
                 <SelectItem value="QR">QR Payment</SelectItem>
                 <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
                 <SelectItem value="CREDIT">Credit (AR)</SelectItem>
+                <SelectItem value="GIFT_CARD">Gift Card</SelectItem>
                 <SelectItem value="MIXED">Mixed</SelectItem>
               </SelectContent>
             </Select>
@@ -217,6 +230,18 @@ export function PaymentDialog({
             <div className="space-y-2">
               <Label>Reference {mode !== "CARD" ? "(required)" : "(optional)"}</Label>
               <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+            </div>
+          )}
+
+          {mode === "GIFT_CARD" && (
+            <div className="space-y-2">
+              <Label>Gift Card Code</Label>
+              <Input
+                value={giftCardCode}
+                onChange={(e) => setGiftCardCode(e.target.value)}
+                placeholder="GC-XXXX-XXXX"
+                autoFocus
+              />
             </div>
           )}
         </div>

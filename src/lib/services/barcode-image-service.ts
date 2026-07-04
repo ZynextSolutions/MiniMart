@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import QRCode from "qrcode";
 
 export type BarcodeFormat = "CODE128" | "EAN13" | "QR";
@@ -109,12 +111,17 @@ export function buildLabelPrintHtml(
     ? `@page { size: ${t.pageSize}; margin: 5mm; }`
     : `@page { size: ${t.widthMm}mm ${t.heightMm}mm; margin: 0; }`;
 
+  const jsBarcodeScript = readFileSync(
+    join(process.cwd(), "node_modules/jsbarcode/dist/JsBarcode.all.min.js"),
+    "utf-8",
+  );
+
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Barcode Labels</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+  <script>${jsBarcodeScript}<\/script>
   <style>
     ${pageRule}
     * { box-sizing: border-box; margin: 0; padding: 0; }

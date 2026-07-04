@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorize, getUserBranches } from "@/lib/permissions/authorization";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-import { BranchService } from "@/features/branches/services/branch.service";
 import { ReportService } from "@/features/reports/services/report.service";
 import { PurchasesReportClient } from "@/features/reports/components/purchases-report-client";
 
@@ -32,11 +32,11 @@ export default async function PurchasesReportPage({ searchParams }: Props) {
   const [report, branches] = await Promise.all([
     ReportService.getPurchaseSummary({
       organizationId: session.user.organizationId,
-      branchId: params.branchId,
+      branchId: resolveSessionBranchFilter(session.user, params.branchId),
       from: parseDateStart(from),
       to: parseDateEnd(to),
     }),
-    BranchService.list(session.user.organizationId),
+    getUserBranches(session.user.id),
   ]);
 
   return (

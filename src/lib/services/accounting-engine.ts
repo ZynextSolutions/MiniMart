@@ -122,7 +122,12 @@ export class AccountingEngine {
   static async postSale(tx: Tx, input: PostSaleInput) {
     if (input.idempotencyKey) {
       const existing = await tx.journalEntry.findUnique({
-        where: { idempotencyKey: input.idempotencyKey },
+        where: {
+          organizationId_idempotencyKey: {
+            organizationId: input.organizationId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
       });
       if (existing) return existing;
     }
@@ -216,6 +221,18 @@ export class AccountingEngine {
   }
 
   static async postSaleReturn(tx: Tx, input: PostSaleInput) {
+    if (input.idempotencyKey) {
+      const existing = await tx.journalEntry.findUnique({
+        where: {
+          organizationId_idempotencyKey: {
+            organizationId: input.organizationId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (existing) return existing;
+    }
+
     const mapping = await this.getAccountMapping(input.organizationId);
     const { fiscalYearId, periodId } = await this.getCurrentPeriod(
       input.organizationId,
@@ -285,6 +302,7 @@ export class AccountingEngine {
         referenceId: input.saleId,
         status: "COMPLETED",
         isAutoPosted: true,
+        idempotencyKey: input.idempotencyKey,
         createdById: input.userId,
         lines: {
           create: await Promise.all(

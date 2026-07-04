@@ -7,8 +7,14 @@ import {
   PaymentMethod,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { PERMISSION_DEFINITIONS } from "../src/lib/permissions/permissions";
 import { ROLE_DESCRIPTIONS, ROLE_PERMISSION_MAP, SYSTEM_ROLES } from "../src/lib/permissions/roles";
+import {
+  modulesForPlanSlug,
+  PLATFORM_MODULES,
+  moduleFlagKey,
+} from "../src/platform/modules/platform-modules";
 
 const prisma = new PrismaClient();
 
@@ -18,6 +24,9 @@ const WAREHOUSE_ID = "00000000-0000-0000-0000-000000000003";
 const REGISTER_ID = "00000000-0000-0000-0000-000000000004";
 const VAT_ID = "00000000-0000-0000-0000-000000000010";
 const FY_ID = "00000000-0000-0000-0000-000000000011";
+const STARTER_PLAN_ID = "00000000-0000-0000-0000-000000000020";
+const PRO_PLAN_ID = "00000000-0000-0000-0000-000000000021";
+const PLATFORM_USER_ID = "00000000-0000-0000-0000-000000000030";
 
 const UNSPLASH = {
   category: [
@@ -83,10 +92,11 @@ function numberFromCode(code: string, fallback = 0): number {
 async function seedSecurityAndAuth() {
   const org = await prisma.organization.upsert({
     where: { id: ORG_ID },
-    update: { currency: "MMK", timezone: "Asia/Yangon", country: "MM" },
+    update: { currency: "MMK", timezone: "Asia/Yangon", country: "MM", slug: "mini-mart", status: "ACTIVE" },
     create: {
       id: ORG_ID,
       name: "Mini Mart",
+      slug: "mini-mart",
       legalName: "Mini Mart Co., Ltd.",
       email: "info@minimart.com",
       phone: "02-123-4567",
@@ -95,6 +105,7 @@ async function seedSecurityAndAuth() {
       country: "MM",
       currency: "MMK",
       timezone: "Asia/Yangon",
+      status: "ACTIVE",
     },
   });
 
@@ -209,6 +220,160 @@ async function seedSecurityAndAuth() {
   }
 
   return { org, branch, warehouse, cashRegister, userMap };
+}
+
+async function seedPlatformLayer(orgId: string) {
+  const starterModules = modulesForPlanSlug("starter");
+  const starterPlan = await prisma.plan.upsert({
+    where: { id: STARTER_PLAN_ID },
+    update: {
+      currency: "MMK",
+      limits: {
+        maxBranches: 1,
+        maxUsers: 3,
+        maxProducts: 100,
+        maxWarehouses: 1,
+        modules: starterModules,
+      },
+    },
+    create: {
+      id: STARTER_PLAN_ID,
+      name: "Starter",
+      slug: "starter",
+      description: "For small businesses getting started",
+      price: 0,
+      currency: "MMK",
+      billingInterval: "MONTHLY",
+      trialDays: 14,
+      limits: {
+        maxBranches: 1,
+        maxUsers: 3,
+        maxProducts: 100,
+        maxWarehouses: 1,
+        modules: starterModules,
+      },
+      features: [],
+      isActive: true,
+      sortOrder: 1,
+    },
+  });
+
+  const proModules = modulesForPlanSlug("professional");
+  await prisma.plan.upsert({
+    where: { id: PRO_PLAN_ID },
+    update: {
+      currency: "MMK",
+      limits: {
+        maxBranches: 5,
+        maxUsers: 20,
+        maxProducts: 5000,
+        maxWarehouses: 10,
+        modules: proModules,
+      },
+    },
+    create: {
+      id: PRO_PLAN_ID,
+      name: "Professional",
+      slug: "professional",
+      description: "For growing businesses with multiple branches",
+      price: 49,
+      currency: "MMK",
+      billingInterval: "MONTHLY",
+      trialDays: 14,
+      limits: {
+        maxBranches: 5,
+        maxUsers: 20,
+        maxProducts: 5000,
+        maxWarehouses: 10,
+        modules: proModules,
+      },
+      features: [],
+      isActive: true,
+      sortOrder: 2,
+    },
+  });
+
+  const now = new Date();
+  const periodEnd = new Date(now);
+  periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+
+  const subscription = await prisma.subscription.upsert({
+    where: { organizationId: orgId },
+    update: { planId: starterPlan.id, status: "ACTIVE" },
+    create: {
+      organizationId: orgId,
+      planId: starterPlan.id,
+      status: "ACTIVE",
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+    },
+  });
+
+  await prisma.subscriptionEvent.create({
+    data: {
+      subscriptionId: subscription.id,
+      status: "ACTIVE",
+      note: "Seed subscription",
+    },
+  });
+
+  const platformAdminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
+  if (!platformAdminPassword) {
+    console.warn(
+      "PLATFORM_ADMIN_PASSWORD not set; platform admin password will not be created or rotated.",
+    );
+  }
+
+  const platformPasswordHash = platformAdminPassword
+    ? await bcrypt.hash(platformAdminPassword, 12)
+    : undefined;
+
+  await prisma.platformUser.upsert({
+    where: { id: PLATFORM_USER_ID },
+    update: {
+      email: "superadmin@platform.com",
+      ...(platformPasswordHash ? { passwordHash: platformPasswordHash } : {}),
+      isActive: true,
+    },
+    create: {
+      id: PLATFORM_USER_ID,
+      email: "superadmin@platform.com",
+      passwordHash:
+        platformPasswordHash ??
+        (await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12)),
+      firstName: "Super",
+      lastName: "Admin",
+      role: "SUPER_ADMIN",
+      isActive: true,
+    },
+  });
+
+  for (const mod of PLATFORM_MODULES) {
+    await prisma.featureFlag.upsert({
+      where: { key: moduleFlagKey(mod.key) },
+      update: { name: mod.label, description: mod.description },
+      create: {
+        key: moduleFlagKey(mod.key),
+        name: mod.label,
+        description: mod.description,
+        isEnabled: true,
+      },
+    });
+  }
+
+  const flags = [
+    { key: "pos.offline", name: "Offline POS (legacy)", description: "Use module.offline_pos instead", isEnabled: false },
+    { key: "reports.export", name: "Report Export", description: "PDF and Excel export", isEnabled: true },
+    { key: "api.access", name: "API Access (legacy)", description: "Use module.api instead", isEnabled: false },
+  ];
+
+  for (const flag of flags) {
+    await prisma.featureFlag.upsert({
+      where: { key: flag.key },
+      update: { name: flag.name, description: flag.description },
+      create: flag,
+    });
+  }
 }
 
 async function seedAccountingMaster(orgId: string) {
@@ -543,13 +708,17 @@ async function seedCatalogAndInventory(orgId: string, warehouseId: string, taxRa
       },
     });
 
+    const barcodeCode = `${numberFromCode(p.sku, i + 1).toString().padStart(12, "0")}8`;
     await prisma.productBarcode.upsert({
-      where: { code: `${numberFromCode(p.sku, i + 1).toString().padStart(12, "0")}8` },
+      where: {
+        organizationId_code: { organizationId: orgId, code: barcodeCode },
+      },
       update: { productId: product.id, variantId: variant.id, isPrimary: true },
       create: {
+        organizationId: orgId,
         productId: product.id,
         variantId: variant.id,
-        code: `${numberFromCode(p.sku, i + 1).toString().padStart(12, "0")}8`,
+        code: barcodeCode,
         type: "EAN13",
         isPrimary: true,
       },
@@ -1219,6 +1388,7 @@ async function main() {
   console.log("Seeding database with full sample data...");
 
   const { org, branch, warehouse, cashRegister, userMap } = await seedSecurityAndAuth();
+  await seedPlatformLayer(org.id);
   await seedAccountingMaster(org.id);
   await seedMasterData(org.id);
   const { variants } = await seedCatalogAndInventory(org.id, warehouse.id, VAT_ID);
@@ -1234,6 +1404,8 @@ async function main() {
   console.log("  admin@minimart.com / Admin@123");
   console.log("  manager@minimart.com / Admin@123");
   console.log("  cashier@minimart.com / Admin@123");
+  console.log("Platform admin:");
+  console.log("  superadmin@platform.com / Platform@123");
   console.log("Unsplash images are used for category/brand/product sample images.");
 }
 

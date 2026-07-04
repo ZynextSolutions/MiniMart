@@ -1,3 +1,4 @@
+import { RateLimitError } from "@/lib/errors/app-error";
 import type { RateLimitOptions, RateLimitResult } from "./types";
 
 function getUpstashConfig() {
@@ -9,9 +10,11 @@ function getUpstashConfig() {
 
 export async function checkUpstashRateLimit(
   options: RateLimitOptions,
-): Promise<RateLimitResult | null> {
+): Promise<RateLimitResult> {
   const config = getUpstashConfig();
-  if (!config) return null;
+  if (!config) {
+    throw new RateLimitError("Rate limiter unavailable");
+  }
 
   const windowSec = Math.max(1, Math.ceil(options.windowMs / 1000));
   const response = await fetch(`${config.url}/pipeline`, {
@@ -28,7 +31,7 @@ export async function checkUpstashRateLimit(
   });
 
   if (!response.ok) {
-    return null;
+    throw new RateLimitError("Rate limiter unavailable");
   }
 
   const results = (await response.json()) as { result: number }[];
