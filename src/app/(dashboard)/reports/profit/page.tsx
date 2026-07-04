@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorize, getUserBranches } from "@/lib/permissions/authorization";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-import { BranchService } from "@/features/branches/services/branch.service";
 import { ReportService } from "@/features/reports/services/report.service";
 import { AnalysisReportClient } from "@/features/reports/components/analysis-report-client";
 
@@ -32,12 +32,12 @@ export default async function ProfitReportPage({ searchParams }: Props) {
 
   const filters = {
     organizationId: session.user.organizationId,
-    branchId: params.branchId,
+    branchId: resolveSessionBranchFilter(session.user, params.branchId),
     from: parseDateStart(from),
     to: parseDateEnd(to),
   };
 
-  const branches = await BranchService.list(session.user.organizationId);
+  const branches = await getUserBranches(session.user.id);
 
   const [profit, bestSelling, slowMoving, deadStock] = await Promise.all([
     view === "profit" ? ReportService.getProfitByProduct(filters) : Promise.resolve(undefined),

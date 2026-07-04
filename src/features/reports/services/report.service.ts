@@ -2,14 +2,20 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { InventoryQueryService } from "@/features/inventory/services/inventory-query.service";
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
+import type { BranchFilter } from "@/lib/auth/branch-access";
 
 export interface ReportFilters {
   organizationId: string;
-  branchId?: string;
+  branchId?: BranchFilter;
   from: Date;
   to: Date;
   page?: number;
   pageSize?: number;
+}
+
+function branchWhere(branchId?: BranchFilter): { branchId?: BranchFilter } {
+  if (!branchId) return {};
+  return { branchId };
 }
 
 function saleWhere(filters: ReportFilters): Prisma.SaleWhereInput {
@@ -18,7 +24,7 @@ function saleWhere(filters: ReportFilters): Prisma.SaleWhereInput {
     deletedAt: null,
     status: "COMPLETED",
     saleType: "SALE",
-    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    ...branchWhere(filters.branchId),
     saleDate: { gte: filters.from, lte: filters.to },
   };
 }
@@ -32,7 +38,7 @@ function saleWhereByType(
     deletedAt: null,
     status: "COMPLETED",
     saleType,
-    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    ...branchWhere(filters.branchId),
     saleDate: { gte: filters.from, lte: filters.to },
   };
 }
@@ -287,7 +293,7 @@ export class ReportService {
         deletedAt: null,
         status: "COMPLETED",
         saleType: { in: ["SALE", "RETURN"] },
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...branchWhere(filters.branchId),
         saleDate: { gte: filters.from, lte: filters.to },
       },
       select: {
@@ -448,7 +454,7 @@ export class ReportService {
           deletedAt: null,
           status: "COMPLETED",
           saleType: { in: ["SALE", "RETURN"] },
-          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+          ...branchWhere(filters.branchId),
           saleDate: { gte: filters.from, lte: filters.to },
         },
       },
@@ -509,7 +515,7 @@ export class ReportService {
     const orders = await prisma.purchaseOrder.findMany({
       where: {
         organizationId: filters.organizationId,
-        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        ...branchWhere(filters.branchId),
         orderDate: { gte: filters.from, lte: filters.to },
         status: { in: ["COMPLETED", "APPROVED"] },
       },
@@ -539,7 +545,9 @@ export class ReportService {
     const receipts = await prisma.goodsReceipt.findMany({
       where: {
         organizationId: filters.organizationId,
-        ...(filters.branchId ? { warehouse: { branchId: filters.branchId } } : {}),
+        ...(filters.branchId
+          ? { warehouse: { ...branchWhere(filters.branchId) } }
+          : {}),
         receiptDate: { gte: filters.from, lte: filters.to },
         status: "COMPLETED",
       },
@@ -652,7 +660,7 @@ export class ReportService {
         warehouse: {
           organizationId: filters.organizationId,
           deletedAt: null,
-          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+          ...branchWhere(filters.branchId),
         },
         quantity: { gt: 0 },
       },
@@ -689,7 +697,7 @@ export class ReportService {
         warehouse: {
           organizationId: filters.organizationId,
           deletedAt: null,
-          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+          ...branchWhere(filters.branchId),
         },
         quantity: { gt: 0 },
       },
@@ -798,7 +806,7 @@ export class ReportService {
           deletedAt: null,
           status: "COMPLETED",
           saleType: "RETURN",
-          ...(filters.branchId ? { branchId: filters.branchId } : {}),
+          ...branchWhere(filters.branchId),
           saleDate: { gte: filters.from, lte: filters.to },
         },
         select: { taxAmount: true, subtotal: true, discountAmount: true, grandTotal: true },

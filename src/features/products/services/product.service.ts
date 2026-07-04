@@ -2,6 +2,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { AuditService } from "@/lib/services/audit-service";
 import { BarcodeService } from "@/lib/services/barcode-service";
+import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 import { BarcodeType, PriceType, type Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
@@ -147,6 +148,8 @@ export class ProductService {
     });
     if (existing) throw new ConflictError("SKU already exists");
 
+    await PlanLimitsService.checkLimit(data.organizationId, "maxProducts");
+
     const product = await prisma.$transaction(async (tx) => {
       const created = await tx.product.create({
         data: {
@@ -187,11 +190,19 @@ export class ProductService {
       const barcodeCode =
         data.barcode || (await BarcodeService.generateInternalCode(data.organizationId));
 
-      const barcodeExists = await tx.productBarcode.findUnique({ where: { code: barcodeCode } });
+      const barcodeExists = await tx.productBarcode.findUnique({
+        where: {
+          organizationId_code: {
+            organizationId: data.organizationId,
+            code: barcodeCode,
+          },
+        },
+      });
       if (barcodeExists) throw new ConflictError("Barcode already exists");
 
       await tx.productBarcode.create({
         data: {
+          organizationId: data.organizationId,
           productId: created.id,
           variantId: variant.id,
           code: barcodeCode,
@@ -308,7 +319,12 @@ export class ProductService {
           where: { productId: id, isPrimary: true },
         });
         const existingBarcode = await tx.productBarcode.findUnique({
-          where: { code: data.barcode },
+          where: {
+            organizationId_code: {
+              organizationId,
+              code: data.barcode,
+            },
+          },
         });
         if (existingBarcode && existingBarcode.productId !== id) {
           throw new ConflictError("Barcode already exists");
@@ -326,6 +342,7 @@ export class ProductService {
           });
           await tx.productBarcode.create({
             data: {
+              organizationId,
               productId: id,
               variantId: defaultVariant?.id ?? null,
               code: data.barcode,
@@ -388,7 +405,9 @@ export class ProductService {
     await this.getById(productId, organizationId);
 
     const code = data.code || (await BarcodeService.generateInternalCode(organizationId));
-    const existing = await prisma.productBarcode.findUnique({ where: { code } });
+    const existing = await prisma.productBarcode.findUnique({
+      where: { organizationId_code: { organizationId, code } },
+    });
     if (existing) throw new ConflictError("Barcode already exists");
 
     if (data.isPrimary) {
@@ -400,6 +419,7 @@ export class ProductService {
 
     const barcode = await prisma.productBarcode.create({
       data: {
+        organizationId,
         productId,
         variantId: data.variantId || null,
         code,

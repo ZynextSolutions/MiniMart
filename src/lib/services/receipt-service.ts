@@ -106,9 +106,8 @@ export class ReceiptService {
   ${paymentsHtml}
   <div class="row"><span>Change</span><span>${money(data.changeAmount)}</span></div>
   <div class="divider"></div>
-  ${data.verificationUrl ? `<div class="center"><img src="" alt="QR" id="receipt-qr" data-url="${escapeHtml(data.verificationUrl)}" style="width:80px;height:80px" /></div>` : ""}
+  ${data.verificationUrl ? `<div class="center" style="font-size:9px">${escapeHtml(data.verificationUrl)}</div>` : ""}
   <div class="center">Thank you for shopping!</div>
-  ${data.verificationUrl ? `<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"><\/script><script>if(window.QRCode){QRCode.toCanvas(document.getElementById('receipt-qr'), '${escapeHtml(data.verificationUrl)}', {width:80,margin:0});}<\/script>` : ""}
 </body>
 </html>`;
   }

@@ -1,4 +1,5 @@
 import type { Permission } from "@/lib/permissions/permissions";
+import type { PlatformModuleKey } from "@/platform/modules/platform-modules";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -21,6 +22,7 @@ export interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: Permission;
+  module?: PlatformModuleKey;
   badge?: string;
   children?: NavItem[];
 }
@@ -36,48 +38,56 @@ export const mainNavItems: NavItem[] = [
     href: "/",
     icon: LayoutDashboard,
     permission: "reports.dashboard",
+    module: "dashboard",
   },
   {
     title: "POS",
     href: "/pos",
     icon: ShoppingCart,
     permission: "pos.access",
+    module: "pos",
   },
   {
     title: "Cash Register",
     href: "/cash-register",
     icon: ShoppingCart,
     permission: "cash-register.view",
+    module: "pos",
   },
   {
     title: "Products",
     href: "/products",
     icon: Package,
     permission: "products.view",
+    module: "catalog",
   },
   {
     title: "Categories",
     href: "/categories",
     icon: Package,
     permission: "categories.manage",
+    module: "catalog",
   },
   {
     title: "Brands",
     href: "/brands",
     icon: Package,
     permission: "brands.manage",
+    module: "catalog",
   },
   {
     title: "Units",
     href: "/units",
     icon: Package,
     permission: "units.manage",
+    module: "catalog",
   },
   {
     title: "Inventory",
     href: "/inventory",
     icon: Warehouse,
     permission: "inventory.view",
+    module: "inventory",
     children: [
       { title: "Overview", href: "/inventory", icon: Warehouse, permission: "inventory.view" },
       { title: "Stock In", href: "/inventory/stock-in", icon: Warehouse, permission: "inventory.stock-in" },
@@ -93,6 +103,7 @@ export const mainNavItems: NavItem[] = [
     href: "/purchasing/orders",
     icon: Truck,
     permission: "purchasing.order.create",
+    module: "purchasing",
     children: [
       { title: "Requests", href: "/purchasing/requests", icon: Truck, permission: "purchasing.request.create" },
       { title: "Orders", href: "/purchasing/orders", icon: Truck, permission: "purchasing.order.create" },
@@ -107,18 +118,21 @@ export const mainNavItems: NavItem[] = [
     href: "/suppliers",
     icon: Store,
     permission: "suppliers.view",
+    module: "suppliers",
   },
   {
     title: "Customers",
     href: "/customers",
     icon: UserCircle,
     permission: "customers.view",
+    module: "customers",
   },
   {
     title: "Accounting",
     href: "/accounting/journal",
     icon: Calculator,
     permission: "accounting.journal.view",
+    module: "accounting",
     children: [
       { title: "Chart of Accounts", href: "/accounting/chart-of-accounts", icon: Calculator, permission: "accounting.coa.view" },
       { title: "Journal Entries", href: "/accounting/journal", icon: Calculator, permission: "accounting.journal.view" },
@@ -141,18 +155,21 @@ export const mainNavItems: NavItem[] = [
     href: "/accounting/expenses",
     icon: Calculator,
     permission: "accounting.expense.create",
+    module: "accounting",
   },
   {
     title: "Income",
     href: "/accounting/income",
     icon: Calculator,
     permission: "accounting.income.create",
+    module: "accounting",
   },
   {
     title: "Reports",
     href: "/reports/sales",
     icon: BarChart3,
     permission: "reports.sales",
+    module: "reports",
     children: [
       { title: "Sales", href: "/reports/sales", icon: BarChart3, permission: "reports.sales" },
       { title: "Purchases", href: "/reports/purchases", icon: BarChart3, permission: "reports.purchases" },
@@ -168,6 +185,7 @@ export const mainNavItems: NavItem[] = [
     href: "/barcode",
     icon: ScanBarcode,
     permission: "barcode.generate",
+    module: "barcode",
     children: [
       { title: "Label Designer", href: "/barcode", icon: ScanBarcode, permission: "barcode.generate" },
     ],
@@ -233,6 +251,26 @@ export const settingsNavItems: NavItem[] = [
     href: "/settings/roles",
     icon: ClipboardList,
     permission: "roles.view",
+  },
+  {
+    title: "Billing",
+    href: "/settings/billing",
+    icon: Calculator,
+    permission: "settings.company.view",
+  },
+  {
+    title: "Promotions",
+    href: "/settings/promotions",
+    icon: ClipboardList,
+    permission: "settings.company.view",
+    module: "promotions",
+  },
+  {
+    title: "Gift Cards",
+    href: "/settings/gift-cards",
+    icon: ClipboardList,
+    permission: "customers.view",
+    module: "gift_cards",
   },
   {
     title: "Audit Logs",

@@ -170,12 +170,15 @@ describe.runIf(ready)("PosService.completeSale (integration)", () => {
     expect(second.id).toBe(first.id);
 
     const saleCount = await prisma.sale.count({
-      where: { idempotencyKey },
+      where: { organizationId: SEED_IDS.orgId, idempotencyKey },
     });
     expect(saleCount).toBe(1);
 
     const journalCount = await prisma.journalEntry.count({
-      where: { idempotencyKey: `journal-${idempotencyKey}` },
+      where: {
+        organizationId: SEED_IDS.orgId,
+        idempotencyKey: `journal-${idempotencyKey}`,
+      },
     });
     expect(journalCount).toBe(1);
   });
@@ -263,7 +266,7 @@ describe.runIf(ready)("PosService.processReturn (integration)", () => {
     expect(second.id).toBe(first.id);
 
     const returnCount = await prisma.sale.count({
-      where: { idempotencyKey },
+      where: { organizationId: SEED_IDS.orgId, idempotencyKey },
     });
     expect(returnCount).toBe(1);
 

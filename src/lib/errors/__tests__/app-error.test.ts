@@ -1,11 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, getErrorMessage } from "../app-error";
 
 describe("getErrorMessage", () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    vi.unstubAllEnvs();
   });
 
   it("returns AppError message in all environments", () => {
@@ -14,14 +12,14 @@ describe("getErrorMessage", () => {
   });
 
   it("returns raw Error message in development", () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     expect(getErrorMessage(new Error("database connection failed"))).toBe(
       "database connection failed",
     );
   });
 
   it("hides raw Error message in production", () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     expect(getErrorMessage(new Error("database connection failed"))).toBe(
       "An unexpected error occurred",
     );

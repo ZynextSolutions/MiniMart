@@ -97,22 +97,29 @@ interface SalesReportClientProps {
       refundAmount: number;
     }[];
   };
+  canViewInvoices?: boolean;
+  canViewReturns?: boolean;
 }
 
-const VIEWS = [
+const ALL_VIEWS = [
   { id: "daily", label: "Daily Sales", exportType: "daily-sales" },
   { id: "product", label: "By Product", exportType: "sales-by-product" },
   { id: "category", label: "By Category", exportType: "sales-by-category" },
   { id: "cashier", label: "By Cashier", exportType: "sales-by-cashier" },
   { id: "payment", label: "By Payment", exportType: "sales-by-payment" },
-  { id: "invoices", label: "Invoice List", exportType: "invoice-list" },
-  { id: "returns", label: "Return List", exportType: "return-list" },
+  { id: "invoices", label: "Invoice List", exportType: "invoice-list", permission: "invoices" as const },
+  { id: "returns", label: "Return List", exportType: "return-list", permission: "returns" as const },
 ];
 
 export function SalesReportClient(props: SalesReportClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentView = VIEWS.find((v) => v.id === props.view) ?? VIEWS[0];
+  const views = ALL_VIEWS.filter((v) => {
+    if (v.permission === "invoices") return props.canViewInvoices !== false;
+    if (v.permission === "returns") return props.canViewReturns !== false;
+    return true;
+  });
+  const currentView = views.find((v) => v.id === props.view) ?? views[0];
 
   function viewHref(id: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -136,7 +143,7 @@ export function SalesReportClient(props: SalesReportClientProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {VIEWS.map((v) => (
+        {views.map((v) => (
           <Link key={v.id} href={viewHref(v.id)}>
             <span
               className={cn(

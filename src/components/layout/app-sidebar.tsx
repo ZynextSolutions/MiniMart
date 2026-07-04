@@ -10,6 +10,7 @@ import {
   type NavItem,
 } from "@/lib/constants/navigation";
 import { usePermission } from "@/hooks/use-permission";
+import { useModules } from "@/components/providers/module-provider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ChevronDown, Store } from "lucide-react";
@@ -24,6 +25,7 @@ type VisibleNavItem = NavItem & { children?: NavItem[] };
 export function AppSidebar({ organizationName, className }: AppSidebarProps) {
   const pathname = usePathname();
   const { hasPermission } = usePermission();
+  const { isModuleEnabled } = useModules();
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
@@ -60,17 +62,21 @@ export function AppSidebar({ organizationName, className }: AppSidebarProps) {
       items
         .map((item) => {
           const children = (item.children ?? []).filter(
-            (child) => !child.permission || hasPermission(child.permission),
+            (child) =>
+              (!child.module || isModuleEnabled(child.module)) &&
+              (!child.permission || hasPermission(child.permission)),
           );
+          const moduleAllowed = !item.module || isModuleEnabled(item.module);
           const showParent =
-            children.length > 0 || !item.permission || hasPermission(item.permission);
+            moduleAllowed &&
+            (children.length > 0 || !item.permission || hasPermission(item.permission));
 
           if (!showParent) return null;
 
           return children.length > 0 ? { ...item, children } : item;
         })
         .filter((item): item is VisibleNavItem => item !== null),
-    [hasPermission],
+    [hasPermission, isModuleEnabled],
   );
 
   const visibleMainGroups = useMemo(

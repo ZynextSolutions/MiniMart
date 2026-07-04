@@ -9,6 +9,10 @@ import { AuditService } from "@/lib/services/audit-service";
 import { CostingEngine } from "@/lib/services/costing-engine";
 import { generateDocumentNumber } from "@/lib/services/document-number";
 import { NotificationService } from "@/lib/services/notification-service";
+import {
+  assertVariantsBelongToOrg,
+  assertWarehouseBelongsToOrg,
+} from "@/lib/services/variant-access";
 import { add, isPositive, sub, toDecimal, ZERO } from "@/lib/utils/decimal";
 import type { CostingMethod, MovementType, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
@@ -275,6 +279,11 @@ export class InventoryService {
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line is required");
 
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
+
     return prisma.$transaction(async (tx) => {
       const warehouse = await tx.warehouse.findFirstOrThrow({
         where: { id: input.warehouseId, organizationId: ctx.organizationId },
@@ -329,6 +338,11 @@ export class InventoryService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line is required");
+
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     return prisma.$transaction(async (tx) => {
       const warehouse = await tx.warehouse.findFirstOrThrow({
@@ -386,6 +400,11 @@ export class InventoryService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line is required");
+
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const notes = [input.reasonCode, input.notes].filter(Boolean).join(" — ");
     const inLines = input.lines.filter((l) => l.direction === "IN");
@@ -487,6 +506,11 @@ export class InventoryService {
       throw new ValidationError("Source and destination warehouses must differ");
     }
     if (input.lines.length === 0) throw new ValidationError("At least one line is required");
+
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const transferGroupId = randomUUID();
 
@@ -695,6 +719,8 @@ export class InventoryService {
     input: { warehouseId: string; countDate: Date; notes?: string },
     ctx: ServiceContext,
   ) {
+    await assertWarehouseBelongsToOrg(ctx.organizationId, input.warehouseId);
+
     const countNumber = await generateDocumentNumber("CNT", ctx.organizationId);
 
     const stockLevels = await prisma.stockLevel.findMany({
@@ -845,6 +871,11 @@ export class InventoryService {
       lines: { variantId: string; quantity: number }[];
     },
   ): Promise<{ totalCogs: Decimal }> {
+    await assertVariantsBelongToOrg(
+      params.organizationId,
+      params.lines.map((l) => l.variantId),
+    );
+
     let totalCogs = ZERO;
     const movementNumber = await generateDocumentNumber("STK-OUT", params.organizationId);
 
@@ -932,6 +963,11 @@ export class InventoryService {
       lines: { variantId: string; quantity: number; unitCost: number }[];
     },
   ): Promise<{ totalCogs: Decimal }> {
+    await assertVariantsBelongToOrg(
+      params.organizationId,
+      params.lines.map((l) => l.variantId),
+    );
+
     let totalCogs = ZERO;
     const movementNumber = await generateDocumentNumber("STK-IN", params.organizationId);
 
@@ -986,6 +1022,11 @@ export class InventoryService {
       }[];
     },
   ) {
+    await assertVariantsBelongToOrg(
+      params.organizationId,
+      params.lines.map((l) => l.variantId),
+    );
+
     const movementNumber = await generateDocumentNumber("STK-IN", params.organizationId);
 
     const movement = await tx.inventoryMovement.create({
@@ -1034,6 +1075,11 @@ export class InventoryService {
       lines: { variantId: string; quantity: number }[];
     },
   ) {
+    await assertVariantsBelongToOrg(
+      params.organizationId,
+      params.lines.map((l) => l.variantId),
+    );
+
     const movementNumber = await generateDocumentNumber("STK-OUT", params.organizationId);
 
     const movement = await tx.inventoryMovement.create({

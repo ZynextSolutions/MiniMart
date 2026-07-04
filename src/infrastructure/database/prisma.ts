@@ -1,22 +1,14 @@
-import { PrismaClient } from "@prisma/client";
+export {
+  getPrisma,
+  getPrismaBase,
+  type PrismaTransactionClient,
+  type TenantPrismaClient,
+} from "@/platform/tenant/tenant-prisma";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+/** Default Prisma client (base, for transactions and platform queries). */
+import { getPrismaBase } from "@/platform/tenant/tenant-prisma";
+export const prisma = getPrismaBase();
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
-
-export type PrismaTransactionClient = Parameters<
-  Parameters<PrismaClient["$transaction"]>[0]
->[0];
+/** Tenant-scoped Prisma with auto-injection when org context is set. */
+import { getPrisma } from "@/platform/tenant/tenant-prisma";
+export const tenantPrisma = getPrisma();

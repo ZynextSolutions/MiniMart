@@ -44,6 +44,28 @@ Open [http://localhost:3000](http://localhost:3000)
 
 **Default login:** `admin@minimart.com` / `Admin@123`
 
+**Platform admin:** set `PLATFORM_ADMIN_PASSWORD` before running seed, then sign in at `/platform-login`
+
+**New organization:** `/signup` (self-service onboarding with trial subscription)
+
+## Phase 9 — SaaS Platform Layer (Complete)
+
+- Multi-tenant schema: `PlatformUser`, `Plan`, `Subscription`, invites, support tickets, feature flags
+- Super admin portal: `/platform` (organizations, plans, subscriptions, audit logs, monitoring)
+- Self-service signup at `/signup` with org provisioning (roles, COA, branch, trial plan)
+- Dual auth: organization (`organization` provider) + platform (`platform` provider)
+- Tenant isolation: `AsyncLocalStorage` org context + optional `tenantPrisma` middleware
+- Plan limits enforced on branches, users, products
+- Billing page at `/settings/billing` with usage vs limits
+- Login org picker when email exists in multiple tenants
+- Suspended org redirect to `/suspended`
+- Promotions/coupons admin at `/settings/promotions`
+- Gift card issuance at `/settings/gift-cards`
+- POS: gift card payment, sale void, exchange (service layer)
+- PWA: `manifest.json`, service worker, IndexedDB offline queue
+- REST API: `/api/v1/customers`, `/api/v1/sales`, `/api/v1/openapi`
+- Docs: `docs/architecture.md`, `docs/deployment.md`, `docs/api.md`, `docs/developer-guide.md`
+
 ## Phase 1 — Foundation (Complete)
 
 - Next.js 15 + React 19 + TypeScript strict
@@ -158,16 +180,11 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ```
 src/
-├── app/              # Next.js App Router
+├── platform/         # SaaS layer (admin, onboarding, subscriptions, tenant)
+├── app/              # Next.js App Router (+ /platform, /signup)
 ├── components/       # Shared UI
-├── features/         # Feature modules (auth, users, roles, settings)
+├── features/         # Feature modules (auth, users, roles, settings, promotions...)
 ├── infrastructure/   # Prisma, external services
-└── lib/              # Auth, permissions, services, utils
+└── lib/              # Auth, permissions, services, offline utils
 ```
-
-## Documentation
-
-See [`docs/`](./docs/) for full architecture and design.
-
-Production deployment: [`docs/deployment.md`](./docs/deployment.md)
 

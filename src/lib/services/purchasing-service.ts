@@ -6,6 +6,11 @@ import { InventoryService } from "@/lib/services/inventory-service";
 import { NotificationService } from "@/lib/services/notification-service";
 import { generatePurchaseDocumentNumber } from "@/lib/services/purchase-document-number";
 import { SupplierLedgerService } from "@/lib/services/supplier-ledger-service";
+import {
+  assertSupplierBelongsToOrg,
+  assertVariantsBelongToOrg,
+  assertWarehouseBelongsToOrg,
+} from "@/lib/services/variant-access";
 import type { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { randomUUID } from "crypto";
@@ -39,6 +44,11 @@ export class PurchasingService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
+
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const requestNumber = await generatePurchaseDocumentNumber("PR", ctx.organizationId);
 
@@ -104,6 +114,8 @@ export class PurchasingService {
   }
 
   static async createPOFromRequest(requestId: string, supplierId: string, ctx: ServiceContext) {
+    await assertSupplierBelongsToOrg(ctx.organizationId, supplierId);
+
     const pr = await prisma.purchaseRequest.findFirst({
       where: { id: requestId, organizationId: ctx.organizationId, status: "APPROVED" },
       include: { lines: true },
@@ -138,6 +150,12 @@ export class PurchasingService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
+
+    await assertSupplierBelongsToOrg(ctx.organizationId, input.supplierId);
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const orderNumber = await generatePurchaseDocumentNumber("PO", ctx.organizationId);
     let subtotal = 0;
@@ -228,6 +246,12 @@ export class PurchasingService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
+
+    await assertWarehouseBelongsToOrg(ctx.organizationId, input.warehouseId);
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const warehouse = await prisma.warehouse.findFirst({
       where: { id: input.warehouseId, organizationId: ctx.organizationId },
@@ -339,6 +363,12 @@ export class PurchasingService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
+
+    await assertSupplierBelongsToOrg(ctx.organizationId, input.supplierId);
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const invoiceNumber = await generatePurchaseDocumentNumber("AP", ctx.organizationId);
     let subtotal = 0;
@@ -505,6 +535,13 @@ export class PurchasingService {
     ctx: ServiceContext,
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
+
+    await assertSupplierBelongsToOrg(ctx.organizationId, input.supplierId);
+    await assertWarehouseBelongsToOrg(ctx.organizationId, input.warehouseId);
+    await assertVariantsBelongToOrg(
+      ctx.organizationId,
+      input.lines.map((l) => l.variantId),
+    );
 
     const warehouse = await prisma.warehouse.findFirst({
       where: { id: input.warehouseId, organizationId: ctx.organizationId },

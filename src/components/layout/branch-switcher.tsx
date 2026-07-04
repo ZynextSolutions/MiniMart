@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useMounted } from "@/hooks/use-mounted";
 import { Check, ChevronsUpDown, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +23,7 @@ interface Branch {
 }
 
 export function BranchSwitcher() {
+  const mounted = useMounted();
   const { data: session, update } = useSession();
   const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -35,12 +37,19 @@ export function BranchSwitcher() {
         setBranches(data);
       }
     }
-    if (session?.user) loadBranches();
-  }, [session?.user]);
+
+    const status = session?.user?.subscriptionStatus;
+    const canUseApp =
+      !status || status === "ACTIVE" || status === "TRIAL" || status === "PAST_DUE";
+
+    if (session?.user && canUseApp) {
+      loadBranches();
+    }
+  }, [session?.user, session?.user?.subscriptionStatus]);
 
   const currentBranch = branches.find((b) => b.id === session?.user?.branchId);
 
-  if (branches.length <= 1) return null;
+  if (!mounted || branches.length <= 1) return null;
 
   async function handleSwitch(branchId: string) {
     setLoading(true);

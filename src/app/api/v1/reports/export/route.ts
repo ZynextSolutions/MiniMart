@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireApiSession } from "@/lib/auth/session";
+import { requireApiSession, type AuthSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
+import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService } from "@/features/reports/services/report.service";
 import { apiErrorResponse } from "@/lib/auth/api-error-response";
@@ -9,7 +11,7 @@ import {
   type ExportTableData,
 } from "@/lib/services/report-export.service";
 
-function parseDateRange(searchParams: URLSearchParams) {
+function parseDateRange(searchParams: URLSearchParams, session: AuthSession) {
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 8)}01`;
   const fromRaw = searchParams.get("from") ?? monthStart;
@@ -17,7 +19,7 @@ function parseDateRange(searchParams: URLSearchParams) {
   return {
     from: new Date(`${fromRaw}T00:00:00.000`),
     to: new Date(`${toRaw}T23:59:59.999`),
-    branchId: searchParams.get("branchId") ?? undefined,
+    branchId: resolveSessionBranchFilter(session.user, searchParams.get("branchId")),
     query: searchParams.get("query") ?? undefined,
     paymentMethod: searchParams.get("paymentMethod") ?? undefined,
   };
@@ -308,7 +310,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing report type" }, { status: 400 });
     }
 
-    const filters = parseDateRange(searchParams);
+    if (type === "invoice-list") {
+      await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_INVOICE_LIST, {
+        branchId: session.user.branchId ?? undefined,
+      });
+    }
+    if (type === "return-list") {
+      await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_RETURN_LIST, {
+        branchId: session.user.branchId ?? undefined,
+      });
+    }
+
+    const filters = parseDateRange(searchParams, session);
     const data = await buildExportData(
       type,
       session.user.organizationId,
