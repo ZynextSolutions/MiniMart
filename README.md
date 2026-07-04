@@ -15,9 +15,9 @@ npm install
 Copy `.env.example` to `.env` and set your PostgreSQL credentials (use `127.0.0.1` on Mac, not `localhost`):
 
 ```env
-DATABASE_URL="postgresql://postgres:password@127.0.0.1:5432/mypos?schema=public"
-DIRECT_URL="postgresql://postgres:password@127.0.0.1:5432/mypos?schema=public"
-AUTH_SECRET="your-secret-here"
+DATABASE_URL=
+DIRECT_URL=
+AUTH_SECRET=
 AUTH_URL="http://localhost:3000"
 ```
 
