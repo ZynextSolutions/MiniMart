@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
-import type { BarcodeFormat } from "@/lib/services/barcode-image-service";
+import type { BarcodeFormat } from "@/lib/services/barcode-label.constants";
 
 interface BarcodeCanvasProps {
   value: string;

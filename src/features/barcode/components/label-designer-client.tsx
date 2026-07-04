@@ -24,7 +24,7 @@ import {
   LABEL_TEMPLATES,
   type BarcodeFormat,
   type LabelTemplate,
-} from "@/lib/services/barcode-image-service";
+} from "@/lib/services/barcode-label.constants";
 import { formatMoney } from "@/lib/utils/format";
 
 interface LabelProduct {
