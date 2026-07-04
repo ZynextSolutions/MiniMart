@@ -99,6 +99,16 @@ export function getErrorMessage(error: unknown): string {
     return "Database connection failed. Please try again in a moment.";
   }
 
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2028"
+  ) {
+    logger.error("Transaction timeout", error);
+    return "The operation took too long. Please try again.";
+  }
+
   if (process.env.NODE_ENV === "production") {
     logger.error("Unhandled server error", error);
     return "An unexpected error occurred";

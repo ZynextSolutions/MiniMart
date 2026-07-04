@@ -1,4 +1,5 @@
 import { prisma } from "@/infrastructure/database/prisma";
+import { POS_TRANSACTION_OPTIONS } from "@/infrastructure/database/transaction-options";
 import {
   ConflictError,
   NotFoundError,
@@ -481,7 +482,7 @@ export class PosService {
       );
 
       return sale;
-    });
+    }, POS_TRANSACTION_OPTIONS);
 
     void NotificationService.checkSaleAlerts({
       organizationId: dto.organizationId,
@@ -789,7 +790,7 @@ export class PosService {
       );
 
       return sale;
-    });
+    }, POS_TRANSACTION_OPTIONS);
 
     void NotificationService.checkReturnAlert({
       organizationId: dto.organizationId,
@@ -875,7 +876,7 @@ export class PosService {
       );
 
       return sale;
-    });
+    }, POS_TRANSACTION_OPTIONS);
   }
 
   static async processExchange(dto: ReturnSaleDTO & {
