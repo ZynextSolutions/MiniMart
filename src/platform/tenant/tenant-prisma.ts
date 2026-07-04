@@ -78,41 +78,33 @@ function createTenantExtension(base: PrismaClient) {
 
 export type TenantPrismaClient = ReturnType<typeof createTenantExtension>;
 
-let prismaBase: PrismaClient | undefined;
-let prismaExtended: TenantPrismaClient | undefined;
-
 export function getPrismaBase(): PrismaClient {
-  if (!prismaBase) {
-    const globalForPrisma = globalThis as unknown as {
-      prismaBase: PrismaClient | undefined;
-    };
-    prismaBase =
-      globalForPrisma.prismaBase ??
-      new PrismaClient({
-        log:
-          process.env.NODE_ENV === "development"
-            ? ["error", "warn"]
-            : ["error"],
-      });
-    if (process.env.NODE_ENV !== "production") {
-      globalForPrisma.prismaBase = prismaBase;
-    }
+  const globalForPrisma = globalThis as unknown as {
+    prismaBase: PrismaClient | undefined;
+  };
+
+  if (!globalForPrisma.prismaBase) {
+    globalForPrisma.prismaBase = new PrismaClient({
+      log:
+        process.env.NODE_ENV === "development"
+          ? ["error", "warn"]
+          : ["error"],
+    });
   }
-  return prismaBase;
+
+  return globalForPrisma.prismaBase;
 }
 
 export function getPrisma(): TenantPrismaClient {
-  if (!prismaExtended) {
-    const globalForPrisma = globalThis as unknown as {
-      prismaExtended: TenantPrismaClient | undefined;
-    };
-    prismaExtended =
-      globalForPrisma.prismaExtended ?? createTenantExtension(getPrismaBase());
-    if (process.env.NODE_ENV !== "production") {
-      globalForPrisma.prismaExtended = prismaExtended;
-    }
+  const globalForPrisma = globalThis as unknown as {
+    prismaExtended: TenantPrismaClient | undefined;
+  };
+
+  if (!globalForPrisma.prismaExtended) {
+    globalForPrisma.prismaExtended = createTenantExtension(getPrismaBase());
   }
-  return prismaExtended;
+
+  return globalForPrisma.prismaExtended;
 }
 
 export type PrismaTransactionClient = Parameters<

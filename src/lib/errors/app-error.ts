@@ -75,13 +75,32 @@ export class PlanLimitExceededError extends AppError {
   }
 }
 
+import { logger } from "@/lib/logger";
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }
 
+function isPrismaConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "PrismaClientInitializationError" ||
+    error.message.includes("Can't reach database server") ||
+    error.message.includes("Connection terminated") ||
+    error.message.includes("Too many connections")
+  );
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof AppError) return error.message;
+
+  if (isPrismaConnectionError(error)) {
+    logger.error("Database connection error", error);
+    return "Database connection failed. Please try again in a moment.";
+  }
+
   if (process.env.NODE_ENV === "production") {
+    logger.error("Unhandled server error", error);
     return "An unexpected error occurred";
   }
   if (error instanceof Error) return error.message;

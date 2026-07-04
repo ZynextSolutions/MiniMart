@@ -17,6 +17,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:reset-platform-admin": "tsx scripts/reset-platform-admin-password.ts",
     "db:studio": "prisma studio",
     "db:local:up": "docker compose up -d",
     "db:local:down": "docker compose down",

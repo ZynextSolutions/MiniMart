@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -97,7 +96,8 @@ export function ProductGrid({ onAddProduct, searchInputRef }: ProductGridProps) 
               >
                 <div className="relative mb-2 aspect-square w-full overflow-hidden rounded-md bg-muted">
                   {p.imageUrl ? (
-                    <Image src={p.imageUrl} alt={p.name} fill className="object-cover" unoptimized />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.imageUrl} alt={p.name} className="absolute inset-0 h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                       No image

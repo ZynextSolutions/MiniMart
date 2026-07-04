@@ -17,11 +17,14 @@ function isUpstashConfigured(): boolean {
   );
 }
 
+let upstashWarningLogged = false;
+
 function assertProductionRateLimiter(): void {
-  if (isProduction() && !isUpstashConfigured()) {
+  if (isProduction() && !isUpstashConfigured() && !upstashWarningLogged) {
+    upstashWarningLogged = true;
     console.warn(
       "[rate-limit] UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not set; " +
-        "using in-memory rate limiting (fine for single-instance dev; configure Upstash for production).",
+        "using in-memory rate limiting (configure Upstash for production).",
     );
   }
 }

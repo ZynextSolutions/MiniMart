@@ -24,7 +24,7 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://res.cloudinary.com",
+      "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https:",
       "font-src 'self' data:",
       "connect-src 'self' https:",
       "frame-ancestors 'none'",
@@ -34,14 +34,20 @@ const securityHeaders = [
   },
 ];
 
+const imageRemotePatterns = [
+  {
+    protocol: "https" as const,
+    hostname: "res.cloudinary.com",
+  },
+  {
+    protocol: "https" as const,
+    hostname: "images.unsplash.com",
+  },
+];
+
 const nextConfig: NextConfig = {
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-      },
-    ],
+    remotePatterns: imageRemotePatterns,
   },
   experimental: {
     serverActions: {

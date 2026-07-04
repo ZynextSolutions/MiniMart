@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Search, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -122,13 +121,13 @@ export function ProductsPageClient({
                 <TableRow key={product.id}>
                   <TableCell>
                     {product.images[0] ? (
-                      <Image
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
                         src={product.images[0].url}
                         alt={product.name}
                         width={40}
                         height={40}
-                        className="rounded object-cover"
-                        unoptimized
+                        className="h-10 w-10 rounded object-cover"
                       />
                     ) : (
                       <div className="h-10 w-10 rounded bg-muted" />
