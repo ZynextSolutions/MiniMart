@@ -1,5 +1,9 @@
 import bcrypt from "bcryptjs";
 import { getPrismaBase } from "@/platform/tenant/tenant-prisma";
+import {
+  ACCOUNT_MAPPING_SETTING_KEY,
+  DEFAULT_ACCOUNT_MAPPING,
+} from "./default-account-mapping";
 import { DEFAULT_CHART_OF_ACCOUNTS } from "./default-chart-of-accounts";
 import { PERMISSION_DEFINITIONS } from "@/lib/permissions/permissions";
 import {
@@ -188,6 +192,14 @@ export class OrganizationProvisioningService {
         });
         accountIdByCode.set(acct.code, created.id);
       }
+
+      await tx.setting.create({
+        data: {
+          organizationId: org.id,
+          key: ACCOUNT_MAPPING_SETTING_KEY,
+          value: DEFAULT_ACCOUNT_MAPPING,
+        },
+      });
 
       await tx.taxRate.create({
         data: {

@@ -1,24 +1,13 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors/app-error";
+import { AccountMappingService } from "@/lib/services/account-mapping-service";
 import { generateSaleDocumentNumber } from "@/lib/services/sale-document-number";
 import { add, sub, toDecimal, ZERO } from "@/lib/utils/decimal";
+import type { AccountMapping } from "@/platform/onboarding/default-account-mapping";
 import type { AccountType, PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
 type Tx = Prisma.TransactionClient;
-
-interface AccountMapping {
-  cash: string;
-  bank: string;
-  accountsReceivable: string;
-  accountsPayable: string;
-  inventory: string;
-  salesTaxPayable: string;
-  salesRevenue: string;
-  cogs: string;
-  giftCardLiability: string;
-  cardClearing: string;
-}
 
 interface JournalLineInput {
   accountCode: string;
@@ -44,11 +33,7 @@ export interface PostSaleInput {
 
 export class AccountingEngine {
   private static async getAccountMapping(organizationId: string): Promise<AccountMapping> {
-    const setting = await prisma.setting.findUnique({
-      where: { organizationId_key: { organizationId, key: "account_mapping" } },
-    });
-    if (!setting?.value) throw new NotFoundError("Account mapping settings");
-    return setting.value as unknown as AccountMapping;
+    return AccountMappingService.getAccountMapping(organizationId);
   }
 
   private static async getAccountId(organizationId: string, code: string) {

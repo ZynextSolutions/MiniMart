@@ -241,6 +241,12 @@ export const settingsNavItems: NavItem[] = [
     permission: "settings.tax.manage",
   },
   {
+    title: "Account Mapping",
+    href: "/settings/account-mapping",
+    icon: Calculator,
+    permission: "settings.fiscal.manage",
+  },
+  {
     title: "Users",
     href: "/settings/users",
     icon: Users,

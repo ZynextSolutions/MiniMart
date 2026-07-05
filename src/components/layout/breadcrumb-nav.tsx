@@ -10,6 +10,7 @@ const labelMap: Record<string, string> = {
   users: "Users",
   roles: "Roles",
   company: "Company",
+  "account-mapping": "Account Mapping",
   "audit-logs": "Audit Logs",
   notifications: "Notifications",
   products: "Products",

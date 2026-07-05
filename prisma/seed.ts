@@ -15,6 +15,10 @@ import {
   PLATFORM_MODULES,
   moduleFlagKey,
 } from "../src/platform/modules/platform-modules";
+import {
+  ACCOUNT_MAPPING_SETTING_KEY,
+  DEFAULT_ACCOUNT_MAPPING,
+} from "../src/platform/onboarding/default-account-mapping";
 
 const prisma = new PrismaClient();
 
@@ -469,36 +473,14 @@ async function seedAccountingMaster(orgId: string) {
   }
 
   await prisma.setting.upsert({
-    where: { organizationId_key: { organizationId: orgId, key: "account_mapping" } },
+    where: { organizationId_key: { organizationId: orgId, key: ACCOUNT_MAPPING_SETTING_KEY } },
     update: {
-      value: {
-        cash: "1100",
-        bank: "1200",
-        accountsReceivable: "1300",
-        inventory: "1400",
-        accountsPayable: "2100",
-        salesTaxPayable: "2200",
-        salesRevenue: "4100",
-        cogs: "5100",
-        giftCardLiability: "2300",
-        cardClearing: "1200",
-      },
+      value: DEFAULT_ACCOUNT_MAPPING,
     },
     create: {
       organizationId: orgId,
-      key: "account_mapping",
-      value: {
-        cash: "1100",
-        bank: "1200",
-        accountsReceivable: "1300",
-        inventory: "1400",
-        accountsPayable: "2100",
-        salesTaxPayable: "2200",
-        salesRevenue: "4100",
-        cogs: "5100",
-        giftCardLiability: "2300",
-        cardClearing: "1200",
-      },
+      key: ACCOUNT_MAPPING_SETTING_KEY,
+      value: DEFAULT_ACCOUNT_MAPPING,
     },
   });
 }
