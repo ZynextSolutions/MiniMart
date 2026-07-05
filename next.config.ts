@@ -8,7 +8,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=()",
+    value: "camera=(self), microphone=(), geolocation=(), payment=()",
   },
   ...(isProduction
     ? [
@@ -26,6 +26,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https:",
       "font-src 'self' data:",
+      "media-src 'self' blob:",
       "connect-src 'self' https:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
