@@ -142,13 +142,15 @@ export function CartPanel({
             Discount
           </Button>
           <Button variant="outline" onClick={onHold} disabled={items.length === 0}>
-            Hold (F2)
+            Hold
+            <span className="ml-1 hidden lg:inline text-muted-foreground">(F2)</span>
           </Button>
           <Button variant="outline" onClick={onClear} disabled={items.length === 0}>
             Clear
           </Button>
           <Button className="col-span-1" onClick={onPay} disabled={items.length === 0} size="lg">
-            Pay (F4)
+            Pay
+            <span className="ml-1 hidden lg:inline text-primary-foreground/80">(F4)</span>
           </Button>
         </div>
       </div>

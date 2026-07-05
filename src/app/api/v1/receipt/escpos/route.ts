@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
         reference: p.reference ?? undefined,
       })),
       taxMode,
+      timezone: org?.timezone ?? undefined,
       verificationUrl: ReceiptService.getVerificationUrl(baseUrl, sale.invoiceNumber),
     };
 

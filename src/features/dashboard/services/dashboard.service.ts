@@ -1,13 +1,23 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ReportService } from "@/features/reports/services/report.service";
-import { InventoryQueryService } from "@/features/inventory/services/inventory-query.service";
 import type { BranchFilter } from "@/lib/auth/branch-access";
+import {
+  dateKeyAddDays,
+  DEFAULT_ORG_TIMEZONE,
+  endOfOrgDay,
+  formatDateKeyLabel,
+  orgLocalDateKey,
+  resolveOrgTimezone,
+  startOfOrgDay,
+  startOfOrgDayForDateKey,
+} from "@/lib/utils/datetime";
 import type { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
 export interface DashboardFilters {
   organizationId: string;
   branchId?: BranchFilter;
+  timezone?: string;
 }
 
 function branchWhere(branchId?: BranchFilter): { branchId?: BranchFilter } {
@@ -18,25 +28,6 @@ function branchWhere(branchId?: BranchFilter): { branchId?: BranchFilter } {
 function toNum(v: Decimal | number | null | undefined): number {
   if (v == null) return 0;
   return Number(v);
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
-function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function saleWhere(filters: DashboardFilters, from: Date, to: Date): Prisma.SaleWhereInput {
@@ -69,55 +60,100 @@ function warehouseWhere(filters: DashboardFilters): Prisma.WarehouseWhereInput {
   };
 }
 
-export class DashboardService {
-  static async getKPIs(filters: DashboardFilters) {
-    const today = startOfDay(new Date());
-    const todayEnd = endOfDay(new Date());
+type LowStockRow = {
+  variantId: string;
+  productName: string;
+  variantName: string;
+  sku: string;
+  warehouseName: string;
+  quantity: number;
+  reorderLevel: number;
+};
 
-    const [
-      todaySales,
-      todayReturns,
-      inventorySummary,
-      expiringSoonCount,
-      productCount,
-      customerCount,
-      openSessions,
-    ] = await Promise.all([
-      prisma.sale.findMany({
-        where: saleWhere(filters, today, todayEnd),
-        select: { grandTotal: true },
-      }),
-      prisma.sale.findMany({
-        where: returnWhere(filters, today, todayEnd),
-        select: { grandTotal: true },
-      }),
-      InventoryQueryService.getSummary(filters.organizationId),
-      this.countExpiringSoon(filters),
-      prisma.product.count({
-        where: {
-          organizationId: filters.organizationId,
-          deletedAt: null,
-          isActive: true,
-        },
-      }),
-      prisma.customer.count({
-        where: {
-          organizationId: filters.organizationId,
-          deletedAt: null,
-          isActive: true,
-        },
-      }),
-      prisma.cashRegisterSession.findMany({
-        where: {
-          status: "OPEN",
-          cashRegister: {
-            branch: { organizationId: filters.organizationId },
-            ...branchWhere(filters.branchId),
+export class DashboardService {
+  private static orgTimezone(filters: DashboardFilters): string {
+    return resolveOrgTimezone(filters.timezone ?? DEFAULT_ORG_TIMEZONE);
+  }
+
+  private static async loadLowStockRows(filters: DashboardFilters): Promise<LowStockRow[]> {
+    const levels = await prisma.stockLevel.findMany({
+      where: {
+        warehouse: warehouseWhere(filters),
+      },
+      include: {
+        warehouse: { select: { name: true } },
+        variant: {
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            product: { select: { name: true, reorderLevel: true } },
           },
         },
-        select: { expectedCash: true, openingBalance: true },
-      }),
-    ]);
+      },
+    });
+
+    return levels
+      .filter(
+        (level) =>
+          level.quantity.lte(level.variant.product.reorderLevel) &&
+          level.variant.product.reorderLevel.gt(0),
+      )
+      .map((level) => ({
+        variantId: level.variant.id,
+        productName: level.variant.product.name,
+        variantName: level.variant.name,
+        sku: level.variant.sku,
+        warehouseName: level.warehouse.name,
+        quantity: toNum(level.quantity),
+        reorderLevel: toNum(level.variant.product.reorderLevel),
+      }))
+      .sort((a, b) => a.quantity / a.reorderLevel - b.quantity / b.reorderLevel);
+  }
+
+  static async getKPIs(filters: DashboardFilters) {
+    const timezone = this.orgTimezone(filters);
+    const now = new Date();
+    const todayStart = startOfOrgDay(now, timezone);
+    const todayEnd = endOfOrgDay(now, timezone);
+
+    const [todaySales, todayReturns, lowStockRows, expiringSoonCount, productCount, customerCount, openSessions] =
+      await Promise.all([
+        prisma.sale.findMany({
+          where: saleWhere(filters, todayStart, todayEnd),
+          select: { grandTotal: true },
+        }),
+        prisma.sale.findMany({
+          where: returnWhere(filters, todayStart, todayEnd),
+          select: { grandTotal: true },
+        }),
+        this.loadLowStockRows(filters),
+        this.countExpiringSoon(filters),
+        prisma.product.count({
+          where: {
+            organizationId: filters.organizationId,
+            deletedAt: null,
+            isActive: true,
+          },
+        }),
+        prisma.customer.count({
+          where: {
+            organizationId: filters.organizationId,
+            deletedAt: null,
+            isActive: true,
+          },
+        }),
+        prisma.cashRegisterSession.findMany({
+          where: {
+            status: "OPEN",
+            cashRegister: {
+              branch: { organizationId: filters.organizationId },
+              ...branchWhere(filters.branchId),
+            },
+          },
+          select: { expectedCash: true, openingBalance: true },
+        }),
+      ]);
 
     const todaySalesTotal = todaySales.reduce((sum, s) => sum + toNum(s.grandTotal), 0);
     const todayReturnsTotal = todayReturns.reduce((sum, s) => sum + toNum(s.grandTotal), 0);
@@ -139,7 +175,7 @@ export class DashboardService {
       todayTransactionCount,
       todayReturnCount,
       avgTransaction,
-      lowStockCount: inventorySummary.lowStockCount,
+      lowStockCount: lowStockRows.length,
       expiringSoonCount,
       productCount,
       customerCount,
@@ -149,27 +185,29 @@ export class DashboardService {
   }
 
   static async getSalesTrend(filters: DashboardFilters, days = 30) {
-    const to = endOfDay(new Date());
-    const from = startOfDay(new Date());
-    from.setDate(from.getDate() - (days - 1));
+    const timezone = this.orgTimezone(filters);
+    const now = new Date();
+    const to = endOfOrgDay(now, timezone);
+    const endKey = orgLocalDateKey(now, timezone);
+    const startKey = dateKeyAddDays(endKey, -(days - 1));
+    const from = startOfOrgDayForDateKey(startKey, timezone);
 
     const report = await ReportService.getDailySales({
       organizationId: filters.organizationId,
       branchId: filters.branchId,
       from,
       to,
+      timezone,
     });
 
     const byDate = new Map(report.rows.map((r) => [r.date, r.netSales]));
     const rows: { date: string; label: string; sales: number }[] = [];
 
     for (let i = 0; i < days; i++) {
-      const d = new Date(from);
-      d.setDate(from.getDate() + i);
-      const date = localDateKey(d);
+      const date = dateKeyAddDays(startKey, i);
       rows.push({
         date,
-        label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        label: formatDateKeyLabel(date),
         sales: byDate.get(date) ?? 0,
       });
     }
@@ -178,9 +216,11 @@ export class DashboardService {
   }
 
   static async getTopProducts(filters: DashboardFilters, days = 7, limit = 10) {
-    const to = endOfDay(new Date());
-    const from = startOfDay(new Date());
-    from.setDate(from.getDate() - (days - 1));
+    const timezone = this.orgTimezone(filters);
+    const now = new Date();
+    const to = endOfOrgDay(now, timezone);
+    const fromKey = dateKeyAddDays(orgLocalDateKey(now, timezone), -(days - 1));
+    const from = startOfOrgDayForDateKey(fromKey, timezone);
 
     const report = await ReportService.getBestSelling(
       {
@@ -188,6 +228,7 @@ export class DashboardService {
         branchId: filters.branchId,
         from,
         to,
+        timezone,
       },
       limit,
     );
@@ -202,15 +243,18 @@ export class DashboardService {
   }
 
   static async getPaymentBreakdown(filters: DashboardFilters, days = 7) {
-    const to = endOfDay(new Date());
-    const from = startOfDay(new Date());
-    from.setDate(from.getDate() - (days - 1));
+    const timezone = this.orgTimezone(filters);
+    const now = new Date();
+    const to = endOfOrgDay(now, timezone);
+    const fromKey = dateKeyAddDays(orgLocalDateKey(now, timezone), -(days - 1));
+    const from = startOfOrgDayForDateKey(fromKey, timezone);
 
     const report = await ReportService.getSalesByPaymentMethod({
       organizationId: filters.organizationId,
       branchId: filters.branchId,
       from,
       to,
+      timezone,
     });
 
     return report.rows.map((r) => ({
@@ -257,47 +301,17 @@ export class DashboardService {
   }
 
   static async getLowStockAlerts(filters: DashboardFilters, limit = 8) {
-    const levels = await prisma.stockLevel.findMany({
-      where: {
-        warehouse: warehouseWhere(filters),
-        quantity: { gt: 0 },
-      },
-      include: {
-        warehouse: { select: { name: true } },
-        variant: {
-          select: {
-            id: true,
-            sku: true,
-            name: true,
-            product: { select: { name: true, reorderLevel: true } },
-          },
-        },
-      },
-    });
-
-    return levels
-      .filter(
-        (l) =>
-          l.quantity.lte(l.variant.product.reorderLevel) &&
-          l.variant.product.reorderLevel.gt(0),
-      )
-      .map((l) => ({
-        variantId: l.variant.id,
-        productName: l.variant.product.name,
-        variantName: l.variant.name,
-        sku: l.variant.sku,
-        warehouseName: l.warehouse.name,
-        quantity: toNum(l.quantity),
-        reorderLevel: toNum(l.variant.product.reorderLevel),
-      }))
-      .sort((a, b) => a.quantity / a.reorderLevel - b.quantity / b.reorderLevel)
-      .slice(0, limit);
+    const rows = await this.loadLowStockRows(filters);
+    return rows.slice(0, limit);
   }
 
   static async getExpiryWarnings(filters: DashboardFilters, limit = 8) {
-    const now = startOfDay(new Date());
-    const warningDate = new Date(now);
-    warningDate.setDate(warningDate.getDate() + 30);
+    const timezone = this.orgTimezone(filters);
+    const now = startOfOrgDay(new Date(), timezone);
+    const warningDate = endOfOrgDay(
+      new Date(startOfOrgDayForDateKey(dateKeyAddDays(orgLocalDateKey(new Date(), timezone), 30), timezone)),
+      timezone,
+    );
 
     const batches = await prisma.productBatch.findMany({
       where: {
@@ -335,38 +349,19 @@ export class DashboardService {
       return batches
         .filter((b) => branchVariantIds.has(b.variantId))
         .slice(0, limit)
-        .map((b) => ({
-          batchId: b.id,
-          variantId: b.variant.id,
-          productName: b.variant.product.name,
-          sku: b.variant.sku,
-          batchNumber: b.batchNumber,
-          expiryDate: b.expiryDate!.toISOString().slice(0, 10),
-          remainingQty: toNum(b.remainingQty),
-          daysUntilExpiry: Math.ceil(
-            (b.expiryDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-          ),
-        }));
+        .map((b) => mapExpiryBatch(b, now));
     }
 
-    return batches.slice(0, limit).map((b) => ({
-      batchId: b.id,
-      variantId: b.variant.id,
-      productName: b.variant.product.name,
-      sku: b.variant.sku,
-      batchNumber: b.batchNumber,
-      expiryDate: b.expiryDate!.toISOString().slice(0, 10),
-      remainingQty: toNum(b.remainingQty),
-      daysUntilExpiry: Math.ceil(
-        (b.expiryDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-      ),
-    }));
+    return batches.slice(0, limit).map((b) => mapExpiryBatch(b, now));
   }
 
   private static async countExpiringSoon(filters: DashboardFilters): Promise<number> {
-    const now = startOfDay(new Date());
-    const warningDate = new Date(now);
-    warningDate.setDate(warningDate.getDate() + 30);
+    const timezone = this.orgTimezone(filters);
+    const now = startOfOrgDay(new Date(), timezone);
+    const warningDate = endOfOrgDay(
+      new Date(startOfOrgDayForDateKey(dateKeyAddDays(orgLocalDateKey(new Date(), timezone), 30), timezone)),
+      timezone,
+    );
 
     const where: Prisma.ProductBatchWhereInput = {
       remainingQty: { gt: 0 },
@@ -394,6 +389,30 @@ export class DashboardService {
 
     return prisma.productBatch.count({ where });
   }
+}
+
+function mapExpiryBatch(
+  batch: {
+    id: string;
+    batchNumber: string;
+    expiryDate: Date | null;
+    remainingQty: Decimal;
+    variant: { id: string; sku: string; product: { name: string } };
+  },
+  now: Date,
+) {
+  return {
+    batchId: batch.id,
+    variantId: batch.variant.id,
+    productName: batch.variant.product.name,
+    sku: batch.variant.sku,
+    batchNumber: batch.batchNumber,
+    expiryDate: batch.expiryDate!.toISOString().slice(0, 10),
+    remainingQty: toNum(batch.remainingQty),
+    daysUntilExpiry: Math.ceil(
+      (batch.expiryDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+    ),
+  };
 }
 
 function formatPaymentMethod(method: string): string {

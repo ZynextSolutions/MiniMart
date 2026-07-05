@@ -1,4 +1,5 @@
 import { formatMoney, formatNumber } from "@/lib/utils/format";
+import { formatOrgDateTime } from "@/lib/utils/datetime";
 import { EscPosBuilder } from "@/lib/services/esc-pos-builder";
 import type { TaxMode } from "@/lib/utils/tax";
 import QRCode from "qrcode";
@@ -33,6 +34,7 @@ export interface ReceiptData {
   verificationUrl?: string;
   currency?: string;
   taxMode?: TaxMode;
+  timezone?: string;
 }
 
 export class ReceiptService {
@@ -45,6 +47,7 @@ export class ReceiptService {
     const money = (value: number) => formatMoney(value, data.currency);
     const subtotalLabel = data.taxMode === "INCLUSIVE" ? "Total Price" : "Subtotal";
     const subtotalValue = data.taxMode === "INCLUSIVE" ? data.grandTotal : data.subtotal;
+    const saleDateLabel = formatOrgDateTime(data.saleDate, data.timezone);
 
     const linesHtml = data.lines
       .map(
@@ -92,7 +95,7 @@ export class ReceiptService {
   ${data.taxId ? `<div class="center">Tax ID: ${escapeHtml(data.taxId)}</div>` : ""}
   <div class="divider"></div>
   <div>Invoice: ${escapeHtml(data.invoiceNumber)}</div>
-  <div>Date: ${data.saleDate.toLocaleString()}</div>
+  <div>Date: ${escapeHtml(saleDateLabel)}</div>
   <div>Cashier: ${escapeHtml(data.cashierName)}</div>
   <div>Customer: ${escapeHtml(data.customerName ?? "Walk-in")}</div>
   <div class="divider"></div>
@@ -142,6 +145,7 @@ export class ReceiptService {
     const money = (value: number) => formatMoney(value, data.currency);
     const subtotalLabel = data.taxMode === "INCLUSIVE" ? "Total Price" : "Subtotal";
     const subtotalValue = data.taxMode === "INCLUSIVE" ? data.grandTotal : data.subtotal;
+    const saleDateLabel = formatOrgDateTime(data.saleDate, data.timezone);
     const b = new EscPosBuilder().init().align("center");
 
     if (options?.logoBitmap) {
@@ -156,7 +160,7 @@ export class ReceiptService {
 
     b.align("left").separator("-", chars);
     b.line(`Invoice: ${data.invoiceNumber}`);
-    b.line(`Date: ${data.saleDate.toLocaleString()}`);
+    b.line(`Date: ${saleDateLabel}`);
     b.line(`Cashier: ${data.cashierName}`);
     b.line(`Customer: ${data.customerName ?? "Walk-in"}`);
     b.separator("-", chars);

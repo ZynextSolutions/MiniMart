@@ -88,7 +88,7 @@ export function HoldSalesDrawer({ open, onOpenChange }: HoldSalesDrawerProps) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>Held Sales (F3)</SheetTitle>
+          <SheetTitle>Held Sales</SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-2">
           {loading ? (

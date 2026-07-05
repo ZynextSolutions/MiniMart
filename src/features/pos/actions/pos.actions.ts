@@ -260,6 +260,7 @@ export async function getReceiptHtmlAction(saleId: string, width: "58" | "80" = 
         reference: p.reference ?? undefined,
       })),
       taxMode,
+      timezone: org?.timezone ?? undefined,
       verificationUrl: ReceiptService.getVerificationUrl(baseUrl, sale.invoiceNumber),
     },
     width,

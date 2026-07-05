@@ -28,7 +28,7 @@ export function RecentTransactionsWidget({
           <CardDescription>Latest completed sales</CardDescription>
         </div>
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/reports/sales">
+          <Link href="/reports/sales?view=invoices">
             View all
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>

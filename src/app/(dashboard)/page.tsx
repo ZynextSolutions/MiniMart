@@ -5,6 +5,7 @@ import { resolveLandingPath } from "@/lib/auth/landing-path";
 import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
+import { prisma } from "@/infrastructure/database/prisma";
 import { DashboardService } from "@/features/dashboard/services/dashboard.service";
 import { DashboardClient } from "@/features/dashboard/components/dashboard-client";
 
@@ -28,9 +29,15 @@ export default async function DashboardPage() {
     branchId: session.user.branchId ?? undefined,
   });
 
+  const org = await prisma.organization.findUnique({
+    where: { id: session.user.organizationId },
+    select: { timezone: true },
+  });
+
   const filters = {
     organizationId: session.user.organizationId,
     branchId: resolveSessionBranchFilter(session.user),
+    timezone: org?.timezone ?? undefined,
   };
 
   const [kpis, salesTrend, topProducts, paymentBreakdown, recentTransactions, lowStockAlerts, expiryWarnings] =

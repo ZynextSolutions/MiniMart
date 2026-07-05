@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { Camera, ScanBarcode } from "lucide-react";
+import { Camera, ClipboardList, ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductGrid } from "./product-grid";
 import { CartPanel } from "./cart-panel";
@@ -184,7 +184,7 @@ export function PosTerminal({
       {sessionId && (
         <div className="flex h-[calc(100vh-8rem)] flex-col gap-3 lg:flex-row">
           <div className="flex flex-1 flex-col gap-2">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => setScannerOpen(true)}>
                 <Camera className="mr-1 h-4 w-4" />
                 Camera
@@ -192,6 +192,10 @@ export function PosTerminal({
               <Button variant="outline" size="sm" onClick={() => searchRef.current?.focus()}>
                 <ScanBarcode className="mr-1 h-4 w-4" />
                 Search
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setHoldOpen(true)}>
+                <ClipboardList className="mr-1 h-4 w-4" />
+                Held sales
               </Button>
               <Button variant="outline" size="sm" onClick={() => setReturnOpen(true)}>
                 Return

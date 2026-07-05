@@ -3,12 +3,14 @@ import { InventoryQueryService } from "@/features/inventory/services/inventory-q
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import type { BranchFilter } from "@/lib/auth/branch-access";
+import { orgLocalDateKey } from "@/lib/utils/datetime";
 
 export interface ReportFilters {
   organizationId: string;
   branchId?: BranchFilter;
   from: Date;
   to: Date;
+  timezone?: string;
   page?: number;
   pageSize?: number;
 }
@@ -48,7 +50,8 @@ function toNum(v: Decimal | number | null | undefined): number {
   return Number(v);
 }
 
-function localDateKey(d: Date): string {
+function localDateKey(d: Date, timezone?: string): string {
+  if (timezone) return orgLocalDateKey(d, timezone);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -127,7 +130,7 @@ export class ReportService {
     >();
 
     for (const s of sales) {
-      const date = localDateKey(s.saleDate);
+      const date = localDateKey(s.saleDate, filters.timezone);
       const row = byDate.get(date) ?? {
         date,
         transactionCount: 0,
@@ -149,7 +152,7 @@ export class ReportService {
     }
 
     for (const r of returns) {
-      const date = localDateKey(r.saleDate);
+      const date = localDateKey(r.saleDate, filters.timezone);
       const row = byDate.get(date) ?? {
         date,
         transactionCount: 0,

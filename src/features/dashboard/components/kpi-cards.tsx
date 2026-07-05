@@ -6,6 +6,7 @@ import {
   Package,
   ShoppingCart,
   TrendingUp,
+  Users,
   Wallet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +58,13 @@ export function KpiCards({ kpis, currency }: KpiCardsProps) {
       description: "Active products in catalog",
       icon: Package,
       href: "/products",
+    },
+    {
+      title: "Customers",
+      value: String(kpis.customerCount),
+      description: "Active customers in directory",
+      icon: Users,
+      href: "/customers",
     },
     {
       title: "Cash in Register",
