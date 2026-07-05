@@ -91,7 +91,8 @@ export class ProductService {
   }
 
   static async search(organizationId: string, query: string, limit = 20) {
-    if (!query.trim()) return [];
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
 
     return prisma.product.findMany({
       where: {
@@ -99,9 +100,10 @@ export class ProductService {
         deletedAt: null,
         isActive: true,
         OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { sku: { contains: query, mode: "insensitive" } },
-          { barcodes: { some: { code: { equals: query } } } },
+          { name: { contains: normalizedQuery, mode: "insensitive" } },
+          { sku: { contains: normalizedQuery, mode: "insensitive" } },
+          { barcodes: { some: { code: { equals: normalizedQuery } } } },
+          { variants: { some: { barcodes: { some: { code: { equals: normalizedQuery } } } } } },
         ],
       },
       take: limit,

@@ -108,7 +108,9 @@ async function assertDiscountPermissions(
 
 export async function lookupBarcodeAction(code: string) {
   const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
-  return PosService.lookupByBarcode(session.user.organizationId, code);
+  const normalizedCode = code.trim();
+  if (!normalizedCode) return null;
+  return PosService.lookupByBarcode(session.user.organizationId, normalizedCode);
 }
 
 export async function validateCouponAction(code: string, subtotal: number) {

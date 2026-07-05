@@ -170,8 +170,11 @@ export class PosService {
   }
 
   static async lookupByBarcode(organizationId: string, code: string) {
+    const normalizedCode = code.trim();
+    if (!normalizedCode) return null;
+
     const barcode = await prisma.productBarcode.findFirst({
-      where: { organizationId, code },
+      where: { organizationId, code: normalizedCode },
       include: {
         product: {
           include: {

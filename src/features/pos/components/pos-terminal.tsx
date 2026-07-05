@@ -60,12 +60,19 @@ export function PosTerminal({
 
   const handleBarcode = useCallback(
     async (code: string) => {
-      const product = await lookupBarcodeAction(code);
-      if (product) {
-        addItem(product);
-        toast.success(`Added ${product.name}`);
-      } else {
-        toast.error(`Product not found: ${code}`);
+      const normalizedCode = code.trim();
+      if (!normalizedCode) return;
+
+      try {
+        const product = await lookupBarcodeAction(normalizedCode);
+        if (product) {
+          addItem(product);
+          toast.success(`Added ${product.name}`);
+        } else {
+          toast.error(`Product not found: ${normalizedCode}`);
+        }
+      } catch {
+        toast.error("Barcode lookup failed. Please try again.");
       }
     },
     [addItem],

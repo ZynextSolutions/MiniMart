@@ -18,6 +18,7 @@ interface BarcodeScannerModalProps {
 
 type ScannerInstance = {
   stop: () => Promise<void>;
+  clear?: () => void | Promise<void>;
 };
 
 function formatCameraError(error: unknown): string {
@@ -66,6 +67,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
   const scannerElementId = useId().replace(/:/g, "");
   const scannerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ScannerInstance | null>(null);
+  const scanHandledRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [active, setActive] = useState(false);
@@ -75,6 +77,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
     instanceRef.current = null;
     if (instance) {
       await instance.stop().catch(() => {});
+      await Promise.resolve(instance.clear?.()).catch(() => {});
     }
     setActive(false);
   }, []);
@@ -82,6 +85,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
   const startScanner = useCallback(async () => {
     setError(null);
     setStarting(true);
+    scanHandledRef.current = false;
 
     try {
       await stopScanner();
@@ -114,7 +118,11 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
         cameraIdOrConfig,
         { fps: 10, qrbox: { width: 280, height: 160 }, aspectRatio: 1.777778 },
         (decoded) => {
-          onScan(decoded);
+          const code = decoded.trim();
+          if (!code || scanHandledRef.current) return;
+          scanHandledRef.current = true;
+          void stopScanner();
+          onScan(code);
           onOpenChange(false);
         },
         () => {},
@@ -133,6 +141,8 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
     if (!open) {
       stopScanner().catch(() => {});
       setError(null);
+      setStarting(false);
+      scanHandledRef.current = false;
       return;
     }
 
@@ -151,10 +161,10 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
           <div
             id={scannerElementId}
             ref={scannerRef}
-            className={`min-h-[280px] w-full overflow-hidden rounded-md bg-muted ${error || !active ? "hidden" : ""}`}
+            className={`min-h-[280px] w-full overflow-hidden rounded-md bg-muted ${error || (!active && !starting) ? "hidden" : ""}`}
           />
 
-          {!active && !error ? (
+          {!active && !starting && !error ? (
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed p-6 text-center">
               <Camera className="h-10 w-10 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
@@ -164,6 +174,10 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
                 {starting ? "Starting..." : "Allow camera & scan"}
               </Button>
             </div>
+          ) : null}
+
+          {starting && !error ? (
+            <p className="text-center text-xs text-muted-foreground">Starting camera...</p>
           ) : null}
 
           {error ? (
