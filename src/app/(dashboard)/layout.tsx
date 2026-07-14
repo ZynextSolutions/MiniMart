@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
+import { AppFooter } from "@/components/layout/app-footer";
 import { AnnouncementBanners } from "@/components/layout/announcement-banners";
 import { ModuleProvider } from "@/components/providers/module-provider";
 import { ModuleAccessService } from "@/platform/modules/module-access.service";
@@ -65,6 +66,7 @@ export default async function DashboardLayout({
             }))}
           />
           <main className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
+          <AppFooter />
         </div>
       </div>
     </ModuleProvider>

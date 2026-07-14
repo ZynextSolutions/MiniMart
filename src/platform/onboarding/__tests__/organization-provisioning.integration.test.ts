@@ -93,6 +93,33 @@ describe.runIf(ready)("OrganizationProvisioningService account mapping (integrat
       await deleteProvisionedOrganization(result.org.id);
     }
   });
+
+  it("sets organization ownerUserId to the provisioned owner", async () => {
+    const slug = `owner-test-${Date.now()}`;
+    const email = `owner-test-${Date.now()}@test.local`;
+
+    const result = await OrganizationProvisioningService.provision({
+      name: "Owner Test Org",
+      slug,
+      ownerEmail: email,
+      ownerPassword: "TestPassword123!",
+      ownerFirstName: "Owner",
+      ownerLastName: "Tester",
+      planSlug: "starter",
+    });
+
+    try {
+      const organization = await prisma.organization.findUniqueOrThrow({
+        where: { id: result.org.id },
+        select: { ownerUserId: true },
+      });
+
+      expect(organization.ownerUserId).toBe(result.owner.id);
+      expect(result.owner.email).toBe(email);
+    } finally {
+      await deleteProvisionedOrganization(result.org.id);
+    }
+  });
 });
 
 describe.runIf(ready)("AccountMappingService lazy init (integration)", () => {

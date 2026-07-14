@@ -113,6 +113,7 @@ export class PosService {
 
   private static async resolveAuthoritativeSaleLines(
     organizationId: string,
+    branchId: string,
     lines: CartLineDTO[],
   ): Promise<CartLineDTO[]> {
     const variantIds = [...new Set(lines.map((l) => l.variantId))];
@@ -135,12 +136,28 @@ export class PosService {
     });
 
     const variantMap = new Map(variants.map((v) => [v.id, v]));
+    const { AssortmentService } = await import(
+      "@/features/products/services/assortment.service"
+    );
+    const assortment = await AssortmentService.resolveVariantsForSale(
+      organizationId,
+      branchId,
+      variantIds,
+    );
 
     return lines.map((line) => {
       const variant = variantMap.get(line.variantId);
       if (!variant) throw new NotFoundError("Product variant");
 
-      const authoritativePrice = Number(variant.sellingPrice);
+      const availability = assortment.get(line.variantId);
+      if (!availability?.allowed) {
+        throw new ValidationError(
+          `${variant.product.name} is not available at this branch`,
+        );
+      }
+
+      const authoritativePrice =
+        availability.sellingPrice ?? Number(variant.sellingPrice);
       const authoritativeCost = Number(variant.costPrice);
       const taxRateId = variant.product.taxRate?.id;
       const authoritativeTaxRate = variant.product.taxRate
@@ -169,7 +186,11 @@ export class PosService {
     });
   }
 
-  static async lookupByBarcode(organizationId: string, code: string) {
+  static async lookupByBarcode(
+    organizationId: string,
+    code: string,
+    branchId?: string,
+  ) {
     const normalizedCode = code.trim();
     if (!normalizedCode) return null;
 
@@ -210,12 +231,29 @@ export class PosService {
     const variant = barcode.variant ?? barcode.product.variants?.[0];
     if (!variant) return null;
 
+    let sellingPrice = Number(variant.sellingPrice);
+    if (branchId) {
+      const { AssortmentService } = await import(
+        "@/features/products/services/assortment.service"
+      );
+      const assortment = await AssortmentService.resolveVariantsForSale(
+        organizationId,
+        branchId,
+        [variant.id],
+      );
+      const availability = assortment.get(variant.id);
+      if (!availability?.allowed) return null;
+      if (availability.sellingPrice != null) {
+        sellingPrice = availability.sellingPrice;
+      }
+    }
+
     return {
       productId: product.id,
       variantId: variant.id,
       name: product.name,
       sku: variant.sku,
-      sellingPrice: Number(variant.sellingPrice),
+      sellingPrice,
       costPrice: Number(variant.costPrice),
       taxRateId: product.taxRate?.id,
       taxRate: product.taxRate ? normalizeTaxRatePercent(Number(product.taxRate.rate)) : 0,
@@ -284,6 +322,7 @@ export class PosService {
     await PosService.validateRegisterContext(dto);
     const authoritativeLines = await PosService.resolveAuthoritativeSaleLines(
       dto.organizationId,
+      dto.branchId,
       dto.lines,
     );
 
@@ -568,9 +607,18 @@ export class PosService {
     await prisma.saleHold.delete({ where: { id } });
   }
 
-  static async getSale(id: string, organizationId: string) {
+  static async getSale(
+    id: string,
+    organizationId: string,
+    options?: { branchId?: string | null },
+  ) {
     const sale = await prisma.sale.findFirst({
-      where: { id, organizationId, deletedAt: null },
+      where: {
+        id,
+        organizationId,
+        deletedAt: null,
+        ...(options?.branchId ? { branchId: options.branchId } : {}),
+      },
       include: {
         lines: true,
         payments: true,

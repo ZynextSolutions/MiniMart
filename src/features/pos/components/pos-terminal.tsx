@@ -210,6 +210,7 @@ export function PosTerminal({
             </div>
             <div className="flex-1 overflow-hidden rounded-lg border bg-background p-3">
               <ProductGrid
+                warehouseId={warehouseId}
                 onAddProduct={(p) => {
                   addItem(p);
                   toast.success(`Added ${p.name}`);

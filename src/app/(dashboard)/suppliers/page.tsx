@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { SupplierService } from "@/features/suppliers/services/supplier.service";
 import { SuppliersPageClient } from "@/features/suppliers/components/suppliers-page-client";
@@ -13,7 +13,7 @@ export default async function SuppliersPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.SUPPLIERS.VIEW);
+  await authorizeSession(session, PERMISSIONS.SUPPLIERS.VIEW);
 
   const params = await searchParams;
   const page = parseInt(params.page ?? "1", 10);

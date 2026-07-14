@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/database/prisma";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { getErrorMessage } from "@/lib/errors/app-error";
 import { PurchasingService } from "@/lib/services/purchasing-service";
@@ -30,10 +30,13 @@ function ctx(session: Awaited<ReturnType<typeof requireSession>>) {
 
 // ─── Purchase Requests ─────────────────────────────────────
 
-export async function listPurchaseRequestsAction() {
+export async function listPurchaseRequestsAction(params?: { branchId?: string }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.REQUEST_CREATE);
-  return PurchasingQueryService.listPurchaseRequests(session.user.organizationId);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.REQUEST_CREATE);
+  return PurchasingQueryService.listPurchaseRequests({
+    organizationId: session.user.organizationId,
+    branchId: resolveSessionBranchFilter(session.user, params?.branchId),
+  });
 }
 
 export async function createPurchaseRequestAction(input: {
@@ -43,7 +46,7 @@ export async function createPurchaseRequestAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.REQUEST_CREATE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.REQUEST_CREATE);
     const pr = await PurchasingService.createPurchaseRequest(
       { ...input, requestDate: new Date(input.requestDate) },
       ctx(session),
@@ -58,7 +61,7 @@ export async function createPurchaseRequestAction(input: {
 export async function submitPurchaseRequestAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.REQUEST_CREATE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.REQUEST_CREATE);
     await PurchasingService.submitPurchaseRequest(id, ctx(session));
     revalidatePath("/purchasing/requests");
     return { success: true };
@@ -70,7 +73,7 @@ export async function submitPurchaseRequestAction(id: string) {
 export async function approvePurchaseRequestAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.REQUEST_APPROVE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.REQUEST_APPROVE);
     await PurchasingService.approvePurchaseRequest(id, ctx(session));
     revalidatePath("/purchasing/requests");
     return { success: true };
@@ -82,7 +85,7 @@ export async function approvePurchaseRequestAction(id: string) {
 export async function createPOFromRequestAction(requestId: string, supplierId: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
     const po = await PurchasingService.createPOFromRequest(requestId, supplierId, ctx(session));
     revalidatePath("/purchasing/orders");
     return { success: true, po };
@@ -93,15 +96,22 @@ export async function createPOFromRequestAction(requestId: string, supplierId: s
 
 // ─── Purchase Orders ───────────────────────────────────────
 
-export async function listPurchaseOrdersAction(status?: string) {
+export async function listPurchaseOrdersAction(params?: {
+  status?: string;
+  branchId?: string;
+}) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
-  return PurchasingQueryService.listPurchaseOrders(session.user.organizationId, status);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
+  return PurchasingQueryService.listPurchaseOrders({
+    organizationId: session.user.organizationId,
+    status: params?.status,
+    branchId: resolveSessionBranchFilter(session.user, params?.branchId),
+  });
 }
 
 export async function getPurchaseOrderAction(id: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
   return PurchasingQueryService.getPurchaseOrderDetail(id, session.user.organizationId);
 }
 
@@ -114,7 +124,7 @@ export async function createPurchaseOrderAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
     const po = await PurchasingService.createPurchaseOrder(
       {
         ...input,
@@ -133,7 +143,7 @@ export async function createPurchaseOrderAction(input: {
 export async function submitPurchaseOrderAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
     await PurchasingService.submitPurchaseOrder(id, ctx(session));
     revalidatePath("/purchasing/orders");
     return { success: true };
@@ -145,7 +155,7 @@ export async function submitPurchaseOrderAction(id: string) {
 export async function approvePurchaseOrderAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_APPROVE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_APPROVE);
     await PurchasingService.approvePurchaseOrder(id, ctx(session));
     revalidatePath("/purchasing/orders");
     return { success: true };
@@ -156,10 +166,13 @@ export async function approvePurchaseOrderAction(id: string) {
 
 // ─── Goods Receipt ─────────────────────────────────────────
 
-export async function listGoodsReceiptsAction() {
+export async function listGoodsReceiptsAction(params?: { branchId?: string }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.RECEIVE);
-  return PurchasingQueryService.listGoodsReceipts(session.user.organizationId);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.RECEIVE);
+  return PurchasingQueryService.listGoodsReceipts({
+    organizationId: session.user.organizationId,
+    branchId: resolveSessionBranchFilter(session.user, params?.branchId),
+  });
 }
 
 export async function createGoodsReceiptAction(input: {
@@ -171,7 +184,7 @@ export async function createGoodsReceiptAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.RECEIVE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.RECEIVE);
     const data = {
       ...input,
       receiptDate: new Date(input.receiptDate),
@@ -188,10 +201,13 @@ export async function createGoodsReceiptAction(input: {
 
 // ─── Supplier Invoices ─────────────────────────────────────
 
-export async function listSupplierInvoicesAction() {
+export async function listSupplierInvoicesAction(params?: { branchId?: string }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
-  return PurchasingQueryService.listSupplierInvoices(session.user.organizationId);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
+  return PurchasingQueryService.listSupplierInvoices({
+    organizationId: session.user.organizationId,
+    branchId: resolveSessionBranchFilter(session.user, params?.branchId),
+  });
 }
 
 export async function createSupplierInvoiceAction(input: {
@@ -203,7 +219,7 @@ export async function createSupplierInvoiceAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
     const invoice = await PurchasingService.createSupplierInvoice(
       {
         ...input,
@@ -230,7 +246,7 @@ export async function recordSupplierPaymentAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SUPPLIERS.PAYMENT);
     const result = await PurchasingService.recordSupplierPayment(
       { ...input, paymentDate: new Date(input.paymentDate) },
       ctx(session),
@@ -254,7 +270,7 @@ export async function createSupplierReturnAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PURCHASING.RETURN);
+    await authorizeSession(session, PERMISSIONS.PURCHASING.RETURN);
     const result = await PurchasingService.createSupplierReturn(
       { ...input, returnDate: new Date(input.returnDate) },
       ctx(session),
@@ -271,13 +287,13 @@ export async function createSupplierReturnAction(input: {
 
 export async function getOutstandingPayablesAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
   return PurchasingQueryService.getOutstandingPayables(session.user.organizationId);
 }
 
 export async function searchVariantsForPurchasingAction(query: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
   if (!query.trim()) return [];
 
   return prisma.productVariant.findMany({

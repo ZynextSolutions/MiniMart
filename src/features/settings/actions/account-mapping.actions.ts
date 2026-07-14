@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { getErrorMessage } from "@/lib/errors/app-error";
 import { AccountMappingService } from "@/lib/services/account-mapping-service";
@@ -25,7 +24,7 @@ const accountMappingSchema = z.object(
 
 export async function getAccountMappingSettingsAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
 
   const [mapping, accounts] = await Promise.all([
     AccountMappingService.getAccountMapping(session.user.organizationId),
@@ -38,7 +37,7 @@ export async function getAccountMappingSettingsAction() {
 export async function updateAccountMappingAction(input: AccountMapping) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
 
     const mapping = accountMappingSchema.parse(input);
     await AccountMappingService.setAccountMapping(
@@ -58,7 +57,7 @@ export async function updateAccountMappingAction(input: AccountMapping) {
 export async function resetAccountMappingAction() {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
 
     const mapping = await AccountMappingService.setAccountMapping(
       session.user.organizationId,

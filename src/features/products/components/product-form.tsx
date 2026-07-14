@@ -382,7 +382,19 @@ export function ProductForm({
                     <FormItem>
                       <FormLabel>Wholesale</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" min="0" {...field} />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          name={field.name}
+                          ref={field.ref}
+                          onBlur={field.onBlur}
+                          value={field.value ?? ""}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            field.onChange(raw === "" ? undefined : Number(raw));
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

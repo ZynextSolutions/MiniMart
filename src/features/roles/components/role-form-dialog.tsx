@@ -134,10 +134,22 @@ export function RoleFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Role" : "Create Role"}</DialogTitle>
+          <DialogTitle>
+            {isEdit
+              ? role?.isSystem
+                ? "Edit System Role"
+                : "Edit Role"
+              : "Create Role"}
+          </DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {role?.isSystem && (
+              <p className="text-sm text-muted-foreground">
+                System role name is fixed. You can update description and
+                permissions.
+              </p>
+            )}
             <FormField
               control={form.control}
               name="name"

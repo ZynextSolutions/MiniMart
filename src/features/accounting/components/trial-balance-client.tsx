@@ -24,6 +24,8 @@ interface TrialBalanceClientProps {
   totalCredit: number;
   isBalanced: boolean;
   asOf: string;
+  defaultBranchId?: string;
+  branches?: { id: string; name: string }[];
 }
 
 export function TrialBalanceClient({
@@ -32,10 +34,17 @@ export function TrialBalanceClient({
   totalCredit,
   isBalanced,
   asOf,
+  defaultBranchId,
+  branches,
 }: TrialBalanceClientProps) {
   return (
     <div className="space-y-4">
-      <ReportDateFilter mode="asOf" defaultAsOf={asOf} />
+      <ReportDateFilter
+        mode="asOf"
+        defaultAsOf={asOf}
+        defaultBranchId={defaultBranchId}
+        branches={branches}
+      />
 
       <div className="flex items-center gap-2">
         <Badge variant={isBalanced ? "default" : "destructive"}>

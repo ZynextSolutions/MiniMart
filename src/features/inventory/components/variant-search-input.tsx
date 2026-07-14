@@ -10,7 +10,7 @@ export interface VariantOption {
   id: string;
   sku: string;
   name: string;
-  costPrice: { toString(): string };
+  costPrice: number;
   product: {
     name: string;
     trackBatch: boolean;

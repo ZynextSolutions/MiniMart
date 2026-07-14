@@ -1,6 +1,4 @@
-import { auth } from "@/lib/auth/auth";
-import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorizeSession, requireSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { CashRegisterService } from "@/lib/services/cash-register-service";
 import { WarehouseService } from "@/features/warehouses/services/warehouse.service";
@@ -8,10 +6,8 @@ import { PosTerminal } from "@/features/pos/components/pos-terminal";
 import { TaxSettingsService } from "@/lib/services/tax-settings-service";
 
 export default async function PosPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-
-  await authorize(session.user.id, PERMISSIONS.POS.ACCESS);
+  const session = await requireSession();
+  await authorizeSession(session, PERMISSIONS.POS.ACCESS);
 
   if (!session.user.branchId) {
     return (

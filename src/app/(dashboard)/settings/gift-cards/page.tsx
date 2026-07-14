@@ -1,6 +1,5 @@
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-import { requireSession } from "@/lib/auth/session";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { prisma } from "@/infrastructure/database/prisma";
 import { GiftCardService } from "@/features/gift-cards/services/gift-card.service";
 import { GiftCardsClient } from "@/features/gift-cards/components/gift-cards-client";
@@ -8,9 +7,7 @@ import { serializeGiftCard } from "@/lib/utils/serialize-prisma";
 
 export default async function GiftCardsSettingsPage() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.CUSTOMERS.VIEW, {
-    branchId: session.user.branchId ?? undefined,
-  });
+  await authorizeSession(session, PERMISSIONS.CUSTOMERS.VIEW);
 
   const [cards, customers] = await Promise.all([
     GiftCardService.list(session.user.organizationId),

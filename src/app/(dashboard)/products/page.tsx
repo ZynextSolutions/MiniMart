@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ProductService } from "@/features/products/services/product.service";
 import { CategoryService } from "@/features/categories/services/category.service";
@@ -18,7 +18,7 @@ export default async function ProductsPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.PRODUCTS.VIEW);
+  await authorizeSession(session, PERMISSIONS.PRODUCTS.VIEW);
 
   const params = await searchParams;
   const page = parseInt(params.page ?? "1", 10);

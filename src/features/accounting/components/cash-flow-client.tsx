@@ -10,6 +10,8 @@ interface CashFlowClientProps {
   netChange: number;
   from: string;
   to: string;
+  defaultBranchId?: string;
+  branches?: { id: string; name: string }[];
 }
 
 export function CashFlowClient({
@@ -19,6 +21,8 @@ export function CashFlowClient({
   netChange,
   from,
   to,
+  defaultBranchId,
+  branches,
 }: CashFlowClientProps) {
   const rows = [
     { label: "Operating Activities", amount: operating },
@@ -28,7 +32,13 @@ export function CashFlowClient({
 
   return (
     <div className="space-y-6">
-      <ReportDateFilter mode="range" defaultFrom={from} defaultTo={to} />
+      <ReportDateFilter
+        mode="range"
+        defaultFrom={from}
+        defaultTo={to}
+        defaultBranchId={defaultBranchId}
+        branches={branches}
+      />
 
       <div className="rounded-md border divide-y max-w-lg">
         {rows.map((row) => (

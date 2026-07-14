@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Pencil, Trash2, Shield } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Plus, Pencil, Trash2, Shield, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,11 @@ import {
 } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/feedback/confirm-dialog";
 import { RoleFormDialog } from "./role-form-dialog";
-import { deleteRoleAction } from "@/features/roles/actions/role.actions";
+import {
+  deleteRoleAction,
+  listRolesAction,
+  syncSystemRolesAction,
+} from "@/features/roles/actions/role.actions";
 
 interface Role {
   id: string;
@@ -45,6 +49,8 @@ export function RolesPageClient({
   const [formOpen, setFormOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -58,19 +64,49 @@ export function RolesPageClient({
     setDeleteId(null);
   }
 
+  function handleSyncSystemRoles() {
+    startTransition(async () => {
+      const result = await syncSystemRolesAction();
+      if (!result.success) {
+        toast.error(result.error);
+        setSyncOpen(false);
+        return;
+      }
+      const refreshed = await listRolesAction();
+      setRoles(refreshed as Role[]);
+      toast.success("System roles reset to defaults");
+      setSyncOpen(false);
+    });
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Roles</h1>
           <p className="text-muted-foreground">
             Manage roles and permissions
           </p>
         </div>
-        <Button onClick={() => { setEditingRole(null); setFormOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Role
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => setSyncOpen(true)}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset system roles
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingRole(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Role
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -89,16 +125,19 @@ export function RolesPageClient({
                 </CardTitle>
                 <CardDescription>{role.description}</CardDescription>
               </div>
-              {!role.isSystem && (
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => { setEditingRole(role); setFormOpen(true); }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setEditingRole(role);
+                    setFormOpen(true);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                {!role.isSystem && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -107,8 +146,8 @@ export function RolesPageClient({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -129,7 +168,11 @@ export function RolesPageClient({
         onSuccess={(updatedRole) => {
           if (editingRole) {
             setRoles((prev) =>
-              prev.map((r) => (r.id === updatedRole.id ? updatedRole : r)),
+              prev.map((r) =>
+                r.id === updatedRole.id
+                  ? { ...updatedRole, _count: r._count }
+                  : r,
+              ),
             );
           } else {
             setRoles((prev) => [...prev, updatedRole]);
@@ -145,6 +188,16 @@ export function RolesPageClient({
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDelete}
+      />
+
+      <ConfirmDialog
+        open={syncOpen}
+        onOpenChange={setSyncOpen}
+        title="Reset system roles"
+        description="This overwrites all system role permissions and descriptions with the current application defaults. Custom roles are not changed."
+        confirmLabel="Reset"
+        variant="destructive"
+        onConfirm={handleSyncSystemRoles}
       />
     </div>
   );

@@ -1,8 +1,7 @@
 "use server";
 
-import { requireSession } from "@/lib/auth/session";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService, type ReportFilters } from "@/features/reports/services/report.service";
 
@@ -28,7 +27,7 @@ export async function getDailySalesReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
   return ReportService.getDailySales(parseFilters(session, params));
 }
 
@@ -39,7 +38,7 @@ export async function getSalesByProductReportAction(params: {
   page?: number;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
   return ReportService.getSalesByProduct(parseFilters(session, params));
 }
 
@@ -49,7 +48,7 @@ export async function getSalesByCategoryReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
   return ReportService.getSalesByCategory(parseFilters(session, params));
 }
 
@@ -59,7 +58,7 @@ export async function getSalesByCashierReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
   return ReportService.getSalesByCashier(parseFilters(session, params));
 }
 
@@ -69,7 +68,7 @@ export async function getSalesByPaymentReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
   return ReportService.getSalesByPaymentMethod(parseFilters(session, params));
 }
 
@@ -79,7 +78,7 @@ export async function getPurchaseReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.PURCHASES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.PURCHASES);
   return ReportService.getPurchaseSummary(parseFilters(session, params));
 }
 
@@ -90,7 +89,7 @@ export async function getInventoryStockReportAction(params: {
   page?: number;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.INVENTORY);
+  await authorizeSession(session, PERMISSIONS.REPORTS.INVENTORY);
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   return ReportService.getStockOnHand({
@@ -108,7 +107,7 @@ export async function getInventoryValuationReportAction(params: {
   warehouseId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.INVENTORY);
+  await authorizeSession(session, PERMISSIONS.REPORTS.INVENTORY);
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   return ReportService.getInventoryValuation({
@@ -125,7 +124,7 @@ export async function getInventoryMovementReportAction(params: {
   warehouseId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.INVENTORY);
+  await authorizeSession(session, PERMISSIONS.REPORTS.INVENTORY);
   return ReportService.getInventoryMovement({
     ...parseFilters(session, params),
     warehouseId: params.warehouseId,
@@ -138,7 +137,7 @@ export async function getProfitReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.FINANCIAL);
+  await authorizeSession(session, PERMISSIONS.REPORTS.FINANCIAL);
   return ReportService.getProfitByProduct(parseFilters(session, params));
 }
 
@@ -148,7 +147,7 @@ export async function getBestSellingReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
   return ReportService.getBestSelling(parseFilters(session, params));
 }
 
@@ -158,7 +157,7 @@ export async function getSlowMovingReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.INVENTORY);
+  await authorizeSession(session, PERMISSIONS.REPORTS.INVENTORY);
   return ReportService.getSlowMoving(parseFilters(session, params));
 }
 
@@ -168,7 +167,7 @@ export async function getDeadStockReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.INVENTORY);
+  await authorizeSession(session, PERMISSIONS.REPORTS.INVENTORY);
   return ReportService.getDeadStock(parseFilters(session, params));
 }
 
@@ -178,7 +177,7 @@ export async function getCustomerStatementReportAction(params: {
   to?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.FINANCIAL);
+  await authorizeSession(session, PERMISSIONS.REPORTS.FINANCIAL);
   return ReportService.getCustomerStatement(
     params.customerId,
     parseFilters(session, params),
@@ -191,7 +190,7 @@ export async function getSupplierStatementReportAction(params: {
   to?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.FINANCIAL);
+  await authorizeSession(session, PERMISSIONS.REPORTS.FINANCIAL);
   return ReportService.getSupplierStatement(
     params.supplierId,
     parseFilters(session, params),
@@ -204,6 +203,6 @@ export async function getTaxReportAction(params: {
   branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.REPORTS.FINANCIAL);
+  await authorizeSession(session, PERMISSIONS.REPORTS.FINANCIAL);
   return ReportService.getTaxReport(parseFilters(session, params));
 }

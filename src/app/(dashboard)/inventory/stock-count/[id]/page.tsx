@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { InventoryQueryService } from "@/features/inventory/services/inventory-query.service";
 import { StockCountDetailClient } from "@/features/inventory/components/stock-count-detail-client";
@@ -16,7 +16,7 @@ export default async function StockCountDetailPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
 
   const { id } = await params;
   const stockCount = await InventoryQueryService.getStockCount(id, session.user.organizationId);

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { OrganizationService } from "@/features/settings/services/organization.service";
 import { CompanySettingsForm } from "@/features/settings/components/company-settings-form";
@@ -9,7 +9,7 @@ export default async function CompanySettingsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.COMPANY_VIEW);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.COMPANY_VIEW);
 
   const organization = await OrganizationService.getById(
     session.user.organizationId,

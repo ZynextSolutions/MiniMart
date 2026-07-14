@@ -110,7 +110,11 @@ export async function lookupBarcodeAction(code: string) {
   const session = await requireBranchSession(PERMISSIONS.POS.ACCESS);
   const normalizedCode = code.trim();
   if (!normalizedCode) return null;
-  return PosService.lookupByBarcode(session.user.organizationId, normalizedCode);
+  return PosService.lookupByBarcode(
+    session.user.organizationId,
+    normalizedCode,
+    session.user.branchId ?? undefined,
+  );
 }
 
 export async function validateCouponAction(code: string, subtotal: number) {
@@ -352,7 +356,13 @@ const returnSchema = z.object({
 
 export async function processReturnAction(input: z.infer<typeof returnSchema>) {
   try {
-    const session = await requireBranchSession(PERMISSIONS.POS.SALE_RETURN);
+    // SALE_RETURN is primary; SALE_REFUND is accepted as an alias for the same flow.
+    let session;
+    try {
+      session = await requireBranchSession(PERMISSIONS.POS.SALE_RETURN);
+    } catch {
+      session = await requireBranchSession(PERMISSIONS.POS.SALE_REFUND);
+    }
     const data = returnSchema.parse(input);
     const sale = await PosService.processReturn({
       ...data,

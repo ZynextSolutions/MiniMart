@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { SupplierService } from "@/features/suppliers/services/supplier.service";
 import { WarehouseService } from "@/features/warehouses/services/warehouse.service";
@@ -10,7 +10,7 @@ export default async function SupplierReturnsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.RETURN);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.RETURN);
 
   const [{ suppliers }, warehouses] = await Promise.all([
     SupplierService.list(session.user.organizationId, { pageSize: 100 }),

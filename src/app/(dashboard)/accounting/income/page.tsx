@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { prisma } from "@/infrastructure/database/prisma";
 import { AccountingQueryService } from "@/features/accounting/services/accounting-query.service";
@@ -10,7 +10,7 @@ export default async function IncomePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.ACCOUNTING.INCOME_CREATE);
+  await authorizeSession(session, PERMISSIONS.ACCOUNTING.INCOME_CREATE);
 
   const [incomes, incomeAccounts] = await Promise.all([
     AccountingQueryService.listIncomes(session.user.organizationId),

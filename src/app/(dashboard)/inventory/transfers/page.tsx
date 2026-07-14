@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { WarehouseService } from "@/features/warehouses/services/warehouse.service";
 import { TransferForm } from "@/features/inventory/components/transfer-form";
@@ -9,7 +9,7 @@ export default async function TransfersPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.TRANSFER);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.TRANSFER);
 
   const warehouses = await WarehouseService.list(session.user.organizationId);
 

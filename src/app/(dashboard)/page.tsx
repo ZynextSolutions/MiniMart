@@ -1,21 +1,26 @@
 import type { Metadata } from "next";
-import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { resolveLandingPath } from "@/lib/auth/landing-path";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorizeSession, requireSession } from "@/lib/auth/session";
+import { getUserBranches } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
+import { resolveAuthorizedBranchFilter } from "@/lib/auth/branch-access";
 import { prisma } from "@/infrastructure/database/prisma";
 import { DashboardService } from "@/features/dashboard/services/dashboard.service";
 import { DashboardClient } from "@/features/dashboard/components/dashboard-client";
+import { DashboardBranchFilter } from "@/features/dashboard/components/dashboard-branch-filter";
 
 export const metadata: Metadata = {
   title: "Dashboard | Mini Mart ERP",
 };
 
-export default async function DashboardPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
+interface DashboardPageProps {
+  searchParams: Promise<{ branchId?: string }>;
+}
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const session = await requireSession();
+  const params = await searchParams;
 
   const canViewDashboard = session.user.permissions?.includes(
     PERMISSIONS.REPORTS.DASHBOARD,
@@ -25,9 +30,10 @@ export default async function DashboardPage() {
     redirect(landing ?? "/login?error=AccessDenied");
   }
 
-  await authorize(session.user.id, PERMISSIONS.REPORTS.DASHBOARD, {
-    branchId: session.user.branchId ?? undefined,
-  });
+  await authorizeSession(session, PERMISSIONS.REPORTS.DASHBOARD);
+
+  const branches = await getUserBranches(session.user.id);
+  const authorizedBranchIds = branches.map((branch) => branch.id);
 
   const org = await prisma.organization.findUnique({
     where: { id: session.user.organizationId },
@@ -36,7 +42,7 @@ export default async function DashboardPage() {
 
   const filters = {
     organizationId: session.user.organizationId,
-    branchId: resolveSessionBranchFilter(session.user),
+    branchId: resolveAuthorizedBranchFilter(authorizedBranchIds, params.branchId),
     timezone: org?.timezone ?? undefined,
   };
 
@@ -57,6 +63,15 @@ export default async function DashboardPage() {
     <DashboardClient
       userName={userName}
       currency={session.user.currency}
+      branchFilter={
+        <DashboardBranchFilter
+          branches={branches.map((branch) => ({
+            id: branch.id,
+            name: branch.name,
+          }))}
+          selectedBranchId={params.branchId}
+        />
+      }
       data={{
         kpis,
         salesTrend,

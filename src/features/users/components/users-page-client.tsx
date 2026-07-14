@@ -25,6 +25,7 @@ import { UserFormDialog } from "./user-form-dialog";
 import {
   deleteUserAction,
   listUsersAction,
+  transferOwnershipAction,
 } from "@/features/users/actions/user.actions";
 
 interface UserRow {
@@ -47,6 +48,8 @@ interface UsersPageClientProps {
   total: number;
   page: number;
   totalPages: number;
+  ownerUserId: string | null;
+  currentUserId: string;
   roles: { id: string; name: string }[];
   branches: { id: string; name: string; code: string }[];
 }
@@ -54,13 +57,18 @@ interface UsersPageClientProps {
 export function UsersPageClient({
   initialUsers,
   total,
+  ownerUserId,
+  currentUserId,
   roles,
   branches,
 }: UsersPageClientProps) {
   const [users, setUsers] = useState(initialUsers);
+  const [currentOwnerUserId, setCurrentOwnerUserId] = useState(ownerUserId);
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null);
+  const isCurrentUserOwner = currentOwnerUserId === currentUserId;
 
   async function refreshUsers() {
     const result = await listUsersAction();
@@ -78,6 +86,23 @@ export function UsersPageClient({
     }
     setDeleteId(null);
   }
+
+  async function handleTransferOwnership() {
+    if (!transferTargetId) return;
+    const result = await transferOwnershipAction(transferTargetId);
+    if (result.success) {
+      toast.success("Ownership transferred");
+      setCurrentOwnerUserId(transferTargetId);
+      await refreshUsers();
+    } else {
+      toast.error(result.error);
+    }
+    setTransferTargetId(null);
+  }
+
+  const transferTarget = transferTargetId
+    ? users.find((user) => user.id === transferTargetId)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -115,6 +140,7 @@ export function UsersPageClient({
             ) : (
               users.map((user) => {
                 const assignment = user.userBranchRoles[0];
+                const isOwner = currentOwnerUserId === user.id;
                 return (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">
@@ -122,10 +148,10 @@ export function UsersPageClient({
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      {assignment?.role.name ?? "—"}
+                      {isOwner ? "Owner" : (assignment?.role.name ?? "—")}
                     </TableCell>
                     <TableCell>
-                      {assignment?.branch.name ?? "—"}
+                      {isOwner ? "All branches" : (assignment?.branch.name ?? "—")}
                     </TableCell>
                     <TableCell>
                       <Badge variant={user.isActive ? "default" : "secondary"}>
@@ -145,7 +171,13 @@ export function UsersPageClient({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {isCurrentUserOwner && !isOwner && (
+                            <DropdownMenuItem onClick={() => setTransferTargetId(user.id)}>
+                              Transfer Ownership
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
+                            disabled={isOwner}
                             onClick={() => {
                               setEditingUser(user);
                               setFormOpen(true);
@@ -155,6 +187,7 @@ export function UsersPageClient({
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            disabled={isOwner}
                             className="text-destructive"
                             onClick={() => setDeleteId(user.id)}
                           >
@@ -189,6 +222,19 @@ export function UsersPageClient({
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDelete}
+      />
+
+      <ConfirmDialog
+        open={!!transferTargetId}
+        onOpenChange={(open) => !open && setTransferTargetId(null)}
+        title="Transfer ownership"
+        description={
+          transferTarget
+            ? `Transfer organization ownership to ${transferTarget.firstName} ${transferTarget.lastName}? You will become a Manager on the default branch.`
+            : "Transfer organization ownership to this user?"
+        }
+        confirmLabel="Transfer"
+        onConfirm={handleTransferOwnership}
       />
     </div>
   );

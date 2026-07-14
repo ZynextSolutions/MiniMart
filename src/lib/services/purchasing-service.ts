@@ -9,7 +9,7 @@ import { SupplierLedgerService } from "@/lib/services/supplier-ledger-service";
 import {
   assertSupplierBelongsToOrg,
   assertVariantsBelongToOrg,
-  assertWarehouseBelongsToOrg,
+  assertWarehouseAccess,
 } from "@/lib/services/variant-access";
 import type { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
@@ -247,16 +247,15 @@ export class PurchasingService {
   ) {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
 
-    await assertWarehouseBelongsToOrg(ctx.organizationId, input.warehouseId);
+    const warehouse = await assertWarehouseAccess(
+      ctx.organizationId,
+      input.warehouseId,
+      { branchId: ctx.branchId },
+    );
     await assertVariantsBelongToOrg(
       ctx.organizationId,
       input.lines.map((l) => l.variantId),
     );
-
-    const warehouse = await prisma.warehouse.findFirst({
-      where: { id: input.warehouseId, organizationId: ctx.organizationId },
-    });
-    if (!warehouse) throw new NotFoundError("Warehouse");
 
     if (input.purchaseOrderId) {
       const po = await this.getPurchaseOrder(input.purchaseOrderId, ctx.organizationId);
@@ -537,16 +536,15 @@ export class PurchasingService {
     if (input.lines.length === 0) throw new ValidationError("At least one line required");
 
     await assertSupplierBelongsToOrg(ctx.organizationId, input.supplierId);
-    await assertWarehouseBelongsToOrg(ctx.organizationId, input.warehouseId);
+    const warehouse = await assertWarehouseAccess(
+      ctx.organizationId,
+      input.warehouseId,
+      { branchId: ctx.branchId },
+    );
     await assertVariantsBelongToOrg(
       ctx.organizationId,
       input.lines.map((l) => l.variantId),
     );
-
-    const warehouse = await prisma.warehouse.findFirst({
-      where: { id: input.warehouseId, organizationId: ctx.organizationId },
-    });
-    if (!warehouse) throw new NotFoundError("Warehouse");
 
     const returnId = randomUUID();
     const totalValue = input.lines.reduce((s, l) => s + l.quantity * l.unitCost, 0);

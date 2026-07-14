@@ -11,6 +11,8 @@ interface InventoryReportClientProps {
   view: string;
   from: string;
   to: string;
+  defaultBranchId?: string;
+  branches?: { id: string; name: string }[];
   stockRows?: { sku: string; productName: string; warehouseName: string; quantity: string; value: string }[];
   valuationRows?: { sku: string; productName: string; warehouseName: string; quantity: string; totalValue: string }[];
   valuationTotal?: number;
@@ -52,9 +54,20 @@ export function InventoryReportClient(props: InventoryReportClientProps) {
       </div>
 
       {props.view === "movement" ? (
-        <ReportFiltersBar mode="range" defaultFrom={props.from} defaultTo={props.to} />
+        <ReportFiltersBar
+          mode="range"
+          defaultFrom={props.from}
+          defaultTo={props.to}
+          defaultBranchId={props.defaultBranchId}
+          branches={props.branches}
+        />
       ) : (
-        <p className="text-sm text-muted-foreground">Current snapshot — no date filter required.</p>
+        <ReportFiltersBar
+          mode="asOf"
+          defaultAsOf={props.to}
+          defaultBranchId={props.defaultBranchId}
+          branches={props.branches}
+        />
       )}
 
       {props.view === "stock" && props.stockRows && (

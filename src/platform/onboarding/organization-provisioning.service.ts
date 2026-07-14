@@ -6,12 +6,9 @@ import {
 } from "./default-account-mapping";
 import { DEFAULT_CHART_OF_ACCOUNTS } from "./default-chart-of-accounts";
 import { PERMISSION_DEFINITIONS } from "@/lib/permissions/permissions";
-import {
-  ROLE_DESCRIPTIONS,
-  ROLE_PERMISSION_MAP,
-  SYSTEM_ROLES,
-} from "@/lib/permissions/roles";
 import { ConflictError } from "@/lib/errors/app-error";
+import { RoleService } from "@/features/roles/services/role.service";
+import { slugify } from "./slug";
 
 export type ProvisionOrganizationInput = {
   name: string;
@@ -25,8 +22,6 @@ export type ProvisionOrganizationInput = {
   currency?: string;
   timezone?: string;
 };
-
-import { slugify } from "./slug";
 
 export class OrganizationProvisioningService {
   static slugify = slugify;
@@ -104,31 +99,7 @@ export class OrganizationProvisioningService {
         });
       }
 
-      const allPermissions = await tx.permission.findMany();
-      const permissionMap = new Map(allPermissions.map((p) => [p.code, p.id]));
-      const roles: Record<string, string> = {};
-
-      for (const [roleName, description] of Object.entries(ROLE_DESCRIPTIONS)) {
-        const role = await tx.role.create({
-          data: {
-            organizationId: org.id,
-            name: roleName,
-            description,
-            isSystem: true,
-          },
-        });
-        roles[roleName] = role.id;
-        const permCodes =
-          ROLE_PERMISSION_MAP[roleName as keyof typeof ROLE_PERMISSION_MAP];
-        for (const code of permCodes) {
-          const permissionId = permissionMap.get(code);
-          if (permissionId) {
-            await tx.rolePermission.create({
-              data: { roleId: role.id, permissionId },
-            });
-          }
-        }
-      }
+      await RoleService.syncSystemRolePermissions(org.id, { tx });
 
       const owner = await tx.user.create({
         data: {
@@ -141,12 +112,9 @@ export class OrganizationProvisioningService {
         },
       });
 
-      await tx.userBranchRole.create({
-        data: {
-          userId: owner.id,
-          branchId: branch.id,
-          roleId: roles[SYSTEM_ROLES.OWNER],
-        },
+      await tx.organization.update({
+        where: { id: org.id },
+        data: { ownerUserId: owner.id },
       });
 
       const currentYear = new Date().getFullYear();

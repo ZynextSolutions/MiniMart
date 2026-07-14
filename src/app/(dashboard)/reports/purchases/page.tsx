@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize, getUserBranches } from "@/lib/permissions/authorization";
+import { getUserBranches } from "@/lib/permissions/authorization";
 import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService } from "@/features/reports/services/report.service";
@@ -21,7 +22,7 @@ function parseDateEnd(date: string): Date {
 export default async function PurchasesReportPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  await authorize(session.user.id, PERMISSIONS.REPORTS.PURCHASES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.PURCHASES);
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);

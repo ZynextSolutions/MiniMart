@@ -1,19 +1,17 @@
-import { auth } from "@/lib/auth/auth";
-import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorizeSession, requireSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { SupplierService } from "@/features/suppliers/services/supplier.service";
 import { PurchasingQueryService } from "@/features/purchasing/services/purchasing-query.service";
 import { RequestsPageClient } from "@/features/purchasing/components/requests-page-client";
 
 export default async function PurchaseRequestsPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.REQUEST_CREATE);
+  const session = await requireSession();
+  await authorizeSession(session, PERMISSIONS.PURCHASING.REQUEST_CREATE);
 
   const [requests, { suppliers }] = await Promise.all([
-    PurchasingQueryService.listPurchaseRequests(session.user.organizationId),
+    PurchasingQueryService.listPurchaseRequests({
+      organizationId: session.user.organizationId,
+    }),
     SupplierService.list(session.user.organizationId, { pageSize: 100 }),
   ]);
 

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize, can, getUserBranches } from "@/lib/permissions/authorization";
+import { can, getUserBranches } from "@/lib/permissions/authorization";
 import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService } from "@/features/reports/services/report.service";
@@ -28,7 +29,7 @@ function parseDateEnd(date: string): Date {
 export default async function SalesReportPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  await authorize(session.user.id, PERMISSIONS.REPORTS.SALES);
+  await authorizeSession(session, PERMISSIONS.REPORTS.SALES);
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
@@ -40,10 +41,10 @@ export default async function SalesReportPage({ searchParams }: Props) {
   const paymentMethod = params.paymentMethod ?? "";
 
   if (view === "invoices") {
-    await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_INVOICE_LIST);
+    await authorizeSession(session, PERMISSIONS.REPORTS.SALES_INVOICE_LIST);
   }
   if (view === "returns") {
-    await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_RETURN_LIST);
+    await authorizeSession(session, PERMISSIONS.REPORTS.SALES_RETURN_LIST);
   }
 
   const filters = {
@@ -87,7 +88,7 @@ export default async function SalesReportPage({ searchParams }: Props) {
         branches={branches.map((b) => ({ id: b.id, name: b.name }))}
         from={from}
         to={to}
-        branchId={params.branchId}
+        branchId={params.branchId ?? session.user.branchId ?? undefined}
         query={query}
         paymentMethod={paymentMethod}
         canViewInvoices={canViewInvoices}

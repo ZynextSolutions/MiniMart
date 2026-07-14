@@ -2,6 +2,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { AuditService } from "@/lib/services/audit-service";
 import { BarcodeService } from "@/lib/services/barcode-service";
+import { ensureStockLevelsForVariants } from "@/lib/services/stock-level-provisioning";
 import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 import { BarcodeType, PriceType, type Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
@@ -90,11 +91,49 @@ export class ProductService {
     return { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 
-  static async search(organizationId: string, query: string, limit = 20) {
+  static async search(
+    organizationId: string,
+    query: string,
+    options?: {
+      limit?: number;
+      warehouseId?: string;
+      inStockOnly?: boolean;
+      /** When set, apply hybrid branch assortment + price overrides. */
+      branchId?: string;
+    },
+  ) {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return [];
 
-    return prisma.product.findMany({
+    const limit = options?.limit ?? 20;
+    const warehouseId = options?.warehouseId;
+    const inStockOnly = Boolean(options?.inStockOnly && warehouseId);
+    const branchId = options?.branchId;
+
+    let assortmentVariantIds: Set<string> | null = null;
+    if (branchId) {
+      const { AssortmentService } = await import(
+        "@/features/products/services/assortment.service"
+      );
+      assortmentVariantIds = await AssortmentService.getActiveVariantIds(
+        organizationId,
+        branchId,
+      );
+      if (assortmentVariantIds && assortmentVariantIds.size === 0) {
+        return [];
+      }
+    }
+
+    const assortmentFilter =
+      assortmentVariantIds != null
+        ? { id: { in: [...assortmentVariantIds] } }
+        : {};
+
+    // Nil UUID matches no rows; keeps stockLevels on the payload type even when
+    // warehouseId is omitted (conditional includes break Prisma inference).
+    const missingId = "00000000-0000-0000-0000-000000000000";
+
+    const products = await prisma.product.findMany({
       where: {
         organizationId,
         deletedAt: null,
@@ -103,8 +142,26 @@ export class ProductService {
           { name: { contains: normalizedQuery, mode: "insensitive" } },
           { sku: { contains: normalizedQuery, mode: "insensitive" } },
           { barcodes: { some: { code: { equals: normalizedQuery } } } },
-          { variants: { some: { barcodes: { some: { code: { equals: normalizedQuery } } } } } },
+          {
+            variants: {
+              some: { barcodes: { some: { code: { equals: normalizedQuery } } } },
+            },
+          },
         ],
+        variants: {
+          some: {
+            deletedAt: null,
+            isActive: true,
+            ...assortmentFilter,
+            ...(inStockOnly
+              ? {
+                  stockLevels: {
+                    some: { warehouseId, quantity: { gt: 0 } },
+                  },
+                }
+              : {}),
+          },
+        },
       },
       take: limit,
       include: {
@@ -112,12 +169,57 @@ export class ProductService {
         images: { where: { isPrimary: true }, take: 1 },
         barcodes: { where: { isPrimary: true }, take: 1 },
         variants: {
-          where: { deletedAt: null, isActive: true },
+          where: {
+            deletedAt: null,
+            isActive: true,
+            ...assortmentFilter,
+          },
           take: 1,
-          include: { barcodes: { where: { isPrimary: true }, take: 1 } },
+          include: {
+            barcodes: { where: { isPrimary: true }, take: 1 },
+            stockLevels: {
+              where: { warehouseId: warehouseId ?? missingId },
+              select: { quantity: true },
+              take: 1,
+            },
+          },
         },
         taxRate: { select: { id: true, rate: true } },
       },
+    });
+
+    if (!branchId || products.length === 0) {
+      return products.map((product) => ({
+        ...product,
+        effectiveSellingPrice: Number(
+          product.variants[0]?.sellingPrice ?? product.sellingPrice,
+        ),
+      }));
+    }
+
+    const variantIds = products
+      .map((product) => product.variants[0]?.id)
+      .filter((id): id is string => Boolean(id));
+
+    const { AssortmentService } = await import(
+      "@/features/products/services/assortment.service"
+    );
+    const overrideByVariantId = await AssortmentService.getPriceOverrides(
+      organizationId,
+      branchId,
+      variantIds,
+    );
+
+    return products.map((product) => {
+      const variant = product.variants[0];
+      const override =
+        variant != null ? overrideByVariantId.get(variant.id) : undefined;
+      return {
+        ...product,
+        effectiveSellingPrice:
+          override ??
+          Number(variant?.sellingPrice ?? product.sellingPrice),
+      };
     });
   }
 
@@ -232,6 +334,10 @@ export class ProductService {
           price: new Decimal(data.sellingPrice),
           minQty: new Decimal(1),
         },
+      });
+
+      await ensureStockLevelsForVariants(data.organizationId, [variant.id], {
+        tx,
       });
 
       return created;

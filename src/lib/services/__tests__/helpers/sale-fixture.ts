@@ -11,6 +11,8 @@ export const SEED_IDS = {
   branchId: "00000000-0000-0000-0000-000000000002",
   warehouseId: "00000000-0000-0000-0000-000000000003",
   registerId: "00000000-0000-0000-0000-000000000004",
+  adminEmail: "admin@minimart.com",
+  managerEmail: "manager@minimart.com",
   cashierEmail: "cashier@minimart.com",
 } as const;
 

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { CustomerService } from "@/features/customers/services/customer.service";
 import { CustomersPageClient } from "@/features/customers/components/customers-page-client";
@@ -13,7 +13,7 @@ export default async function CustomersPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.CUSTOMERS.VIEW);
+  await authorizeSession(session, PERMISSIONS.CUSTOMERS.VIEW);
 
   const params = await searchParams;
   const page = parseInt(params.page ?? "1", 10);

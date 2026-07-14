@@ -790,12 +790,14 @@ export class AccountingEngine {
     organizationId: string,
     asOf: Date,
     from?: Date,
+    branchId?: string | { in: string[] },
   ) {
     const entries = await prisma.journalEntry.findMany({
       where: {
         organizationId,
         status: "COMPLETED",
         deletedAt: null,
+        ...(branchId ? { branchId } : {}),
         entryDate: from
           ? { gte: from, lte: asOf }
           : { lte: asOf },
@@ -841,8 +843,17 @@ export class AccountingEngine {
     return Array.from(balances.values());
   }
 
-  static async getTrialBalance(organizationId: string, asOf: Date) {
-    const balances = await this.aggregateAccountBalances(organizationId, asOf);
+  static async getTrialBalance(
+    organizationId: string,
+    asOf: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    const balances = await this.aggregateAccountBalances(
+      organizationId,
+      asOf,
+      undefined,
+      branchId,
+    );
     const rows = balances
       .map((b) => {
         const netDebit = sub(b.debit, b.credit);
@@ -914,8 +925,17 @@ export class AccountingEngine {
     });
   }
 
-  static async getBalanceSheet(organizationId: string, asOf: Date) {
-    const balances = await this.aggregateAccountBalances(organizationId, asOf);
+  static async getBalanceSheet(
+    organizationId: string,
+    asOf: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    const balances = await this.aggregateAccountBalances(
+      organizationId,
+      asOf,
+      undefined,
+      branchId,
+    );
 
     function sectionTotal(type: AccountType) {
       return balances
@@ -971,8 +991,18 @@ export class AccountingEngine {
     };
   }
 
-  static async getProfitAndLoss(organizationId: string, from: Date, to: Date) {
-    const balances = await this.aggregateAccountBalances(organizationId, to, from);
+  static async getProfitAndLoss(
+    organizationId: string,
+    from: Date,
+    to: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    const balances = await this.aggregateAccountBalances(
+      organizationId,
+      to,
+      from,
+      branchId,
+    );
 
     const revenue = balances
       .filter((b) => b.type === "REVENUE")
@@ -1011,7 +1041,12 @@ export class AccountingEngine {
     };
   }
 
-  static async getCashFlow(organizationId: string, from: Date, to: Date) {
+  static async getCashFlow(
+    organizationId: string,
+    from: Date,
+    to: Date,
+    branchId?: string | { in: string[] },
+  ) {
     const mapping = await this.getAccountMapping(organizationId);
     const cashAccounts = await prisma.account.findMany({
       where: {
@@ -1035,6 +1070,7 @@ export class AccountingEngine {
           organizationId,
           status: "COMPLETED",
           deletedAt: null,
+          ...(branchId ? { branchId } : {}),
           entryDate: { gte: from, lte: to },
         },
       },

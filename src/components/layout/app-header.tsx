@@ -17,8 +17,9 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar } from "./app-sidebar";
-import { BranchSwitcher } from "./branch-switcher";
 import { BreadcrumbNav } from "./breadcrumb-nav";
+import { BranchSwitcher } from "./branch-switcher";
+import { HeaderClock } from "./header-clock";
 import { NotificationBell } from "./notification-bell";
 import { setSystemCurrency } from "@/lib/utils/format";
 
@@ -51,7 +52,7 @@ export function AppHeader() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-64 p-0">
-            <AppSidebar organizationName={user?.organizationName} />
+            <AppSidebar organizationName={user?.organizationName} collapsible={false} />
           </SheetContent>
         </Sheet>
       ) : (
@@ -63,8 +64,9 @@ export function AppHeader() {
 
       <BreadcrumbNav />
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
         <BranchSwitcher />
+        <HeaderClock />
         <NotificationBell />
         <Button
           variant="ghost"

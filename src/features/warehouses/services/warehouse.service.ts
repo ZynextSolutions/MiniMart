@@ -1,9 +1,11 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { AuditService } from "@/lib/services/audit-service";
+import { ensureStockLevelsForVariants } from "@/lib/services/stock-level-provisioning";
+import type { BranchFilter } from "@/lib/auth/branch-access";
 
 export class WarehouseService {
-  static async list(organizationId: string, branchId?: string) {
+  static async list(organizationId: string, branchId?: BranchFilter) {
     return prisma.warehouse.findMany({
       where: {
         organizationId,
@@ -45,6 +47,19 @@ export class WarehouseService {
       const warehouse = await tx.warehouse.create({
         data: { ...data, isActive: true },
       });
+
+      const variants = await tx.productVariant.findMany({
+        where: {
+          deletedAt: null,
+          product: { organizationId: data.organizationId, deletedAt: null },
+        },
+        select: { id: true },
+      });
+      await ensureStockLevelsForVariants(
+        data.organizationId,
+        variants.map((v) => v.id),
+        { warehouseIds: [warehouse.id], tx },
+      );
 
       await AuditService.log({
         organizationId: data.organizationId,

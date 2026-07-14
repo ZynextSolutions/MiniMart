@@ -52,11 +52,15 @@ export function BranchSwitcher() {
   if (!mounted || branches.length <= 1) return null;
 
   async function handleSwitch(branchId: string) {
+    if (branchId === session?.user?.branchId) return;
     setLoading(true);
     try {
       const result = await switchBranchAction(branchId);
       if (result.success) {
-        await update({ branchId, permissions: result.permissions });
+        await update({
+          branchId: result.branchId,
+          permissions: result.permissions,
+        });
         router.refresh();
       }
     } finally {
@@ -70,7 +74,7 @@ export function BranchSwitcher() {
         <Button
           variant="outline"
           size="sm"
-          className="hidden h-8 gap-2 sm:flex"
+          className="h-8 gap-2"
           disabled={loading}
         >
           <Store className="h-3.5 w-3.5" />
@@ -86,6 +90,7 @@ export function BranchSwitcher() {
             key={branch.id}
             onClick={() => handleSwitch(branch.id)}
             className="gap-2"
+            disabled={loading}
           >
             <Check
               className={cn(

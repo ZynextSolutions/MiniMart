@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { OrganizationService } from "@/features/settings/services/organization.service";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -28,7 +27,7 @@ export async function updateOrganizationAction(
 ) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.COMPANY_UPDATE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.COMPANY_UPDATE);
 
     const data = updateOrgSchema.parse(input);
     const org = await OrganizationService.update(
@@ -53,6 +52,6 @@ export async function updateOrganizationAction(
 
 export async function getOrganizationAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.COMPANY_VIEW);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.COMPANY_VIEW);
   return OrganizationService.getById(session.user.organizationId);
 }

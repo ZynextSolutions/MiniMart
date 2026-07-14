@@ -1,35 +1,49 @@
-import { auth } from "@/lib/auth/auth";
-import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorizeSession, requireSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
+import { getUserBranches } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { InventoryQueryService } from "@/features/inventory/services/inventory-query.service";
 import { WarehouseService } from "@/features/warehouses/services/warehouse.service";
 import { InventoryOverviewClient } from "@/features/inventory/components/inventory-overview-client";
+import { DashboardBranchFilter } from "@/features/dashboard/components/dashboard-branch-filter";
 
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; warehouse?: string; page?: string }>;
+  searchParams: Promise<{
+    search?: string;
+    warehouse?: string;
+    page?: string;
+    branchId?: string;
+  }>;
 }) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.VIEW);
+  const session = await requireSession();
+  await authorizeSession(session, PERMISSIONS.INVENTORY.VIEW);
 
   const params = await searchParams;
   const page = parseInt(params.page ?? "1", 10);
   const warehouseId = params.warehouse;
+  const branchFilter = resolveSessionBranchFilter(session.user, params.branchId);
 
-  const [stockResult, valuation, summary, warehouses] = await Promise.all([
+  const [stockResult, valuation, summary, warehouses, branches] = await Promise.all([
     InventoryQueryService.listStockLevels({
       organizationId: session.user.organizationId,
+      branchId: branchFilter,
       warehouseId,
       search: params.search,
       page,
     }),
-    InventoryQueryService.getValuation(session.user.organizationId, warehouseId),
-    InventoryQueryService.getSummary(session.user.organizationId),
-    WarehouseService.list(session.user.organizationId, session.user.branchId ?? undefined),
+    InventoryQueryService.getValuation(
+      session.user.organizationId,
+      warehouseId,
+      branchFilter,
+    ),
+    InventoryQueryService.getSummary(session.user.organizationId, branchFilter),
+    WarehouseService.list(
+      session.user.organizationId,
+      typeof branchFilter === "string" ? branchFilter : session.user.branchId ?? undefined,
+    ),
+    getUserBranches(session.user.id),
   ]);
 
   const clientLevels = stockResult.levels.map((l) => ({
@@ -61,9 +75,16 @@ export default async function InventoryPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
-        <p className="text-muted-foreground">Stock levels, valuation, and movements</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
+          <p className="text-muted-foreground">Stock levels, valuation, and movements</p>
+        </div>
+        <DashboardBranchFilter
+          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+          selectedBranchId={params.branchId ?? session.user.branchId ?? undefined}
+          allEncoding="param"
+        />
       </div>
       <InventoryOverviewClient
         levels={clientLevels}

@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing saleId" }, { status: 400 });
     }
 
-    const sale = await PosService.getSale(saleId, session.user.organizationId);
+    const sale = await PosService.getSale(saleId, session.user.organizationId, {
+      branchId: session.user.branchId,
+    });
     const org = await prisma.organization.findUnique({
       where: { id: session.user.organizationId },
     });

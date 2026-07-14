@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect, notFound } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ProductService } from "@/features/products/services/product.service";
 import { CategoryService } from "@/features/categories/services/category.service";
@@ -18,7 +18,7 @@ export default async function EditProductPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.PRODUCTS.UPDATE);
+  await authorizeSession(session, PERMISSIONS.PRODUCTS.UPDATE);
 
   const { id } = await params;
   const orgId = session.user.organizationId;

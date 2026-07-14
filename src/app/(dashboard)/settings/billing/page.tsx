@@ -1,6 +1,5 @@
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-import { requireSession } from "@/lib/auth/session";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { prisma } from "@/infrastructure/database/prisma";
 import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 import { SubscriptionGuardService } from "@/platform/subscriptions/subscription-guard.service";
@@ -17,9 +16,7 @@ const PLATFORM_SUPPORT_EMAIL =
 
 export default async function BillingSettingsPage() {
   const session = await requireSession({ skipSubscriptionCheck: true });
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.COMPANY_VIEW, {
-    branchId: session.user.branchId ?? undefined,
-  });
+  await authorizeSession(session, PERMISSIONS.SETTINGS.COMPANY_VIEW);
 
   const [subscription, usage, enabledModules, availablePlans] = await Promise.all([
     prisma.subscription.findUnique({

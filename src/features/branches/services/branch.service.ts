@@ -1,6 +1,7 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { AuditService } from "@/lib/services/audit-service";
+import { ensureStockLevelsForVariants } from "@/lib/services/stock-level-provisioning";
 import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 
 export class BranchService {
@@ -49,16 +50,45 @@ export class BranchService {
         },
       });
 
-      await tx.warehouse.create({
+      const existingWarehouseCodes = await tx.warehouse.findMany({
+        where: { organizationId: data.organizationId, code: { startsWith: "WH-" } },
+        select: { code: true },
+      });
+      const usedNumbers = new Set<number>();
+      for (const item of existingWarehouseCodes) {
+        const match = /^WH-(\d+)$/.exec(item.code);
+        if (!match) continue;
+        usedNumbers.add(Number(match[1]));
+      }
+      let nextWarehouseNumber = 1;
+      while (usedNumbers.has(nextWarehouseNumber)) {
+        nextWarehouseNumber += 1;
+      }
+      const defaultWarehouseCode = `WH-${String(nextWarehouseNumber).padStart(2, "0")}`;
+
+      const warehouse = await tx.warehouse.create({
         data: {
           organizationId: data.organizationId,
           branchId: branch.id,
-          code: "WH-01",
+          code: defaultWarehouseCode,
           name: `${branch.name} Warehouse`,
           isDefault: true,
           isActive: true,
         },
       });
+
+      const variants = await tx.productVariant.findMany({
+        where: {
+          deletedAt: null,
+          product: { organizationId: data.organizationId, deletedAt: null },
+        },
+        select: { id: true },
+      });
+      await ensureStockLevelsForVariants(
+        data.organizationId,
+        variants.map((v) => v.id),
+        { warehouseIds: [warehouse.id], tx },
+      );
 
       await tx.cashRegister.create({
         data: {

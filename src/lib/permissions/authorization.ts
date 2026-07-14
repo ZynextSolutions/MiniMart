@@ -2,12 +2,44 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { ForbiddenError } from "@/lib/errors/app-error";
 import type { Permission } from "./permissions";
 import { ALL_PERMISSION_CODES } from "./permissions";
-import { SYSTEM_ROLES } from "./roles";
+
+async function getActiveUserOrganizationId(userId: string): Promise<string | null> {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, isActive: true, deletedAt: null },
+    select: { organizationId: true },
+  });
+  return user?.organizationId ?? null;
+}
+
+export async function isOrganizationOwner(
+  userId: string,
+  organizationId?: string,
+): Promise<boolean> {
+  const resolvedOrganizationId =
+    organizationId ?? (await getActiveUserOrganizationId(userId));
+  if (!resolvedOrganizationId) return false;
+
+  const organization = await prisma.organization.findFirst({
+    where: { id: resolvedOrganizationId, deletedAt: null },
+    select: { ownerUserId: true },
+  });
+  if (!organization) return false;
+  return organization.ownerUserId === userId;
+}
 
 export async function getUserPermissions(
   userId: string,
   branchId?: string,
 ): Promise<Set<string>> {
+  const organizationId = await getActiveUserOrganizationId(userId);
+  if (!organizationId) {
+    return new Set<string>();
+  }
+
+  if (await isOrganizationOwner(userId, organizationId)) {
+    return new Set<string>(ALL_PERMISSION_CODES);
+  }
+
   const assignments = await prisma.userBranchRole.findMany({
     where: {
       userId,
@@ -29,10 +61,6 @@ export async function getUserPermissions(
 
   const permissions = new Set<string>();
   for (const assignment of assignments) {
-    if (assignment.role.name === SYSTEM_ROLES.OWNER) {
-      for (const code of ALL_PERMISSION_CODES) permissions.add(code);
-      continue;
-    }
     for (const rp of assignment.role.rolePermissions) {
       permissions.add(rp.permission.code);
     }
@@ -61,6 +89,20 @@ export async function authorize(
 }
 
 export async function getUserBranches(userId: string) {
+  const organizationId = await getActiveUserOrganizationId(userId);
+  if (!organizationId) return [];
+
+  if (await isOrganizationOwner(userId, organizationId)) {
+    return prisma.branch.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        isActive: true,
+      },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    });
+  }
+
   return prisma.branch.findMany({
     where: {
       deletedAt: null,

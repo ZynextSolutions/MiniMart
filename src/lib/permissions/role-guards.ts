@@ -1,4 +1,4 @@
-import { ConflictError, ValidationError } from "@/lib/errors/app-error";
+import { ValidationError } from "@/lib/errors/app-error";
 import { SYSTEM_ROLES } from "./roles";
 
 export function assertRoleAssignable(roleName: string): void {
@@ -9,11 +9,13 @@ export function assertRoleAssignable(roleName: string): void {
   }
 }
 
-export function assertSystemRolePermissionsEditable(
+/** System roles keep a fixed name; permissions/description may be edited. */
+export function assertSystemRoleRenameAllowed(
   isSystem: boolean,
-  permissionIds?: string[],
+  currentName: string,
+  nextName?: string,
 ): void {
-  if (isSystem && permissionIds !== undefined) {
-    throw new ConflictError("Cannot modify permissions of system roles");
+  if (isSystem && nextName != null && nextName !== currentName) {
+    throw new ValidationError("Cannot rename system roles");
   }
 }

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { AccountMappingSettingsForm } from "@/features/settings/components/account-mapping-settings-form";
 import { getAccountMappingSettingsAction } from "@/features/settings/actions/account-mapping.actions";
@@ -9,7 +9,7 @@ export default async function AccountMappingSettingsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.FISCAL_MANAGE);
 
   const { mapping, accounts } = await getAccountMappingSettingsAction();
 

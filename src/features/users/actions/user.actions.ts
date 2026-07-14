@@ -3,8 +3,8 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
+import { isOrganizationOwner } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { UserService } from "@/features/users/services/user.service";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -33,7 +33,7 @@ const updateUserSchema = z.object({
 export async function createUserAction(input: z.infer<typeof createUserSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.USERS.CREATE);
+    await authorizeSession(session, PERMISSIONS.USERS.CREATE);
 
     const data = createUserSchema.parse(input);
     const passwordHash = await bcrypt.hash(data.password, 12);
@@ -61,7 +61,7 @@ export async function createUserAction(input: z.infer<typeof createUserSchema>) 
 export async function updateUserAction(input: z.infer<typeof updateUserSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.USERS.UPDATE);
+    await authorizeSession(session, PERMISSIONS.USERS.UPDATE);
 
     const data = updateUserSchema.parse(input);
     const passwordHash = data.password
@@ -95,7 +95,7 @@ export async function updateUserAction(input: z.infer<typeof updateUserSchema>) 
 export async function deleteUserAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.USERS.DELETE);
+    await authorizeSession(session, PERMISSIONS.USERS.DELETE);
 
     if (id === session.user.id) {
       return { success: false, error: "Cannot delete your own account" };
@@ -111,11 +111,37 @@ export async function deleteUserAction(id: string) {
 
 export async function listUsersAction(params?: { page?: number; search?: string }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.USERS.VIEW);
+  await authorizeSession(session, PERMISSIONS.USERS.VIEW);
 
   return UserService.list({
     organizationId: session.user.organizationId,
     page: params?.page,
     search: params?.search,
   });
+}
+
+export async function transferOwnershipAction(targetUserId: string) {
+  try {
+    const session = await requireSession();
+    await authorizeSession(session, PERMISSIONS.USERS.UPDATE);
+
+    const isOwner = await isOrganizationOwner(
+      session.user.id,
+      session.user.organizationId,
+    );
+    if (!isOwner) {
+      return { success: false, error: "Only the current owner can transfer ownership" };
+    }
+
+    await UserService.transferOwnership(
+      session.user.organizationId,
+      session.user.id,
+      targetUserId,
+    );
+
+    revalidatePath("/settings/users");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: getErrorMessage(error) };
+  }
 }

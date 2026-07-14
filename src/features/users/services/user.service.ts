@@ -1,6 +1,7 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors/app-error";
 import { assertRoleAssignable } from "@/lib/permissions/role-guards";
+import { SYSTEM_ROLES } from "@/lib/permissions/roles";
 import { AuditService } from "@/lib/services/audit-service";
 import { PlanLimitsService } from "@/platform/subscriptions/plan-limits.service";
 import type { Prisma } from "@prisma/client";
@@ -13,6 +14,17 @@ export interface ListUsersParams {
 }
 
 export class UserService {
+  private static async getOrganizationOwnerId(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+  ): Promise<string | null> {
+    const organization = await tx.organization.findFirst({
+      where: { id: organizationId, deletedAt: null },
+      select: { ownerUserId: true },
+    });
+    return organization?.ownerUserId ?? null;
+  }
+
   private static async validateBranchRoles(
     tx: Prisma.TransactionClient,
     organizationId: string,
@@ -182,6 +194,9 @@ export class UserService {
     const before = await this.getById(id, organizationId);
 
     const user = await prisma.$transaction(async (tx) => {
+      const ownerUserId = await this.getOrganizationOwnerId(tx, organizationId);
+      const isOrganizationOwner = ownerUserId === id;
+
       const updated = await tx.user.update({
         where: { id },
         data: {
@@ -193,7 +208,18 @@ export class UserService {
         },
       });
 
+      if (isOrganizationOwner && data.isActive === false) {
+        throw new ConflictError(
+          "Transfer ownership before deactivating the organization owner",
+        );
+      }
+
       if (data.branchRoles) {
+        if (isOrganizationOwner) {
+          throw new ConflictError(
+            "Organization owner role assignment cannot be edited from this form",
+          );
+        }
         const existingAssignments = await tx.userBranchRole.count({
           where: { userId: id },
         });
@@ -231,9 +257,18 @@ export class UserService {
   static async softDelete(id: string, organizationId: string, actorId: string) {
     const before = await this.getById(id, organizationId);
 
-    await prisma.user.update({
-      where: { id },
-      data: { deletedAt: new Date(), isActive: false },
+    await prisma.$transaction(async (tx) => {
+      const ownerUserId = await this.getOrganizationOwnerId(tx, organizationId);
+      if (ownerUserId === id) {
+        throw new ConflictError(
+          "Transfer ownership before deleting the organization owner",
+        );
+      }
+
+      await tx.user.update({
+        where: { id },
+        data: { deletedAt: new Date(), isActive: false },
+      });
     });
 
     await AuditService.log({
@@ -243,6 +278,113 @@ export class UserService {
       entityType: "User",
       entityId: id,
       before: { email: before.email },
+    });
+  }
+
+  static async transferOwnership(
+    organizationId: string,
+    actorId: string,
+    targetUserId: string,
+  ) {
+    const [actor, target] = await Promise.all([
+      prisma.user.findFirst({
+        where: {
+          id: actorId,
+          organizationId,
+          deletedAt: null,
+          isActive: true,
+        },
+        select: { id: true },
+      }),
+      prisma.user.findFirst({
+        where: {
+          id: targetUserId,
+          organizationId,
+          deletedAt: null,
+          isActive: true,
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!actor) throw new NotFoundError("Actor");
+    if (!target) throw new NotFoundError("Target user");
+
+    await prisma.$transaction(async (tx) => {
+      const ownerUserId = await this.getOrganizationOwnerId(tx, organizationId);
+      if (ownerUserId !== actorId) {
+        throw new ConflictError("Only the current owner can transfer ownership");
+      }
+      if (actorId === targetUserId) {
+        throw new ConflictError("Target user is already the owner");
+      }
+
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { ownerUserId: targetUserId },
+      });
+
+      // Demote previous owner: drop Owner role assignments, ensure they keep access.
+      const ownerRole = await tx.role.findFirst({
+        where: {
+          organizationId,
+          name: SYSTEM_ROLES.OWNER,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (ownerRole) {
+        await tx.userBranchRole.deleteMany({
+          where: { userId: actorId, roleId: ownerRole.id },
+        });
+      }
+
+      const remainingAssignments = await tx.userBranchRole.count({
+        where: { userId: actorId },
+      });
+      if (remainingAssignments === 0) {
+        const managerRole = await tx.role.findFirst({
+          where: {
+            organizationId,
+            name: SYSTEM_ROLES.MANAGER,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (!managerRole) {
+          throw new ConflictError("Manager role is required to demote the previous owner");
+        }
+
+        const defaultBranch = await tx.branch.findFirst({
+          where: {
+            organizationId,
+            deletedAt: null,
+            isActive: true,
+          },
+          orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+          select: { id: true },
+        });
+        if (!defaultBranch) {
+          throw new ConflictError("No active branch available for previous owner assignment");
+        }
+
+        await tx.userBranchRole.create({
+          data: {
+            userId: actorId,
+            branchId: defaultBranch.id,
+            roleId: managerRole.id,
+          },
+        });
+      }
+    });
+
+    await AuditService.log({
+      organizationId,
+      userId: actorId,
+      action: "ownership.transferred",
+      entityType: "Organization",
+      entityId: organizationId,
+      after: { ownerUserId: targetUserId },
     });
   }
 }

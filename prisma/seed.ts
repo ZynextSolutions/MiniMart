@@ -9,7 +9,8 @@ import {
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { PERMISSION_DEFINITIONS } from "../src/lib/permissions/permissions";
-import { ROLE_DESCRIPTIONS, ROLE_PERMISSION_MAP, SYSTEM_ROLES } from "../src/lib/permissions/roles";
+import { SYSTEM_ROLES } from "../src/lib/permissions/roles";
+import { RoleService } from "../src/features/roles/services/role.service";
 import {
   modulesForPlanSlug,
   PLATFORM_MODULES,
@@ -161,26 +162,15 @@ async function seedSecurityAndAuth() {
     });
   }
 
-  const allPermissions = await prisma.permission.findMany();
-  const permissionMap = new Map(allPermissions.map((p) => [p.code, p.id]));
+  await RoleService.syncSystemRolePermissions(org.id);
+
   const roles: Record<string, string> = {};
-
-  for (const [roleName, description] of Object.entries(ROLE_DESCRIPTIONS)) {
-    const role = await prisma.role.upsert({
-      where: { organizationId_name: { organizationId: org.id, name: roleName } },
-      update: { description },
-      create: { organizationId: org.id, name: roleName, description, isSystem: true },
+  for (const roleName of Object.values(SYSTEM_ROLES)) {
+    const role = await prisma.role.findFirst({
+      where: { organizationId: org.id, name: roleName, deletedAt: null },
+      select: { id: true },
     });
-    roles[roleName] = role.id;
-    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
-
-    const permCodes = ROLE_PERMISSION_MAP[roleName as keyof typeof ROLE_PERMISSION_MAP];
-    for (const code of permCodes) {
-      const permissionId = permissionMap.get(code);
-      if (permissionId) {
-        await prisma.rolePermission.create({ data: { roleId: role.id, permissionId } });
-      }
-    }
+    if (role) roles[roleName] = role.id;
   }
 
   const passwordHash = await bcrypt.hash("Admin@123", 12);
@@ -222,6 +212,11 @@ async function seedSecurityAndAuth() {
       },
     });
   }
+
+  await prisma.organization.update({
+    where: { id: org.id },
+    data: { ownerUserId: userMap["admin@minimart.com"] },
+  });
 
   return { org, branch, warehouse, cashRegister, userMap };
 }

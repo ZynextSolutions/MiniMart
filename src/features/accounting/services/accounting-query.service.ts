@@ -149,8 +149,12 @@ export class AccountingQueryService {
     });
   }
 
-  static async getTrialBalance(organizationId: string, asOf: Date) {
-    return AccountingEngine.getTrialBalance(organizationId, asOf);
+  static async getTrialBalance(
+    organizationId: string,
+    asOf: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    return AccountingEngine.getTrialBalance(organizationId, asOf, branchId);
   }
 
   static async getGeneralLedger(
@@ -162,16 +166,30 @@ export class AccountingQueryService {
     return AccountingEngine.getGeneralLedger(organizationId, accountId, from, to);
   }
 
-  static async getBalanceSheet(organizationId: string, asOf: Date) {
-    return AccountingEngine.getBalanceSheet(organizationId, asOf);
+  static async getBalanceSheet(
+    organizationId: string,
+    asOf: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    return AccountingEngine.getBalanceSheet(organizationId, asOf, branchId);
   }
 
-  static async getProfitAndLoss(organizationId: string, from: Date, to: Date) {
-    return AccountingEngine.getProfitAndLoss(organizationId, from, to);
+  static async getProfitAndLoss(
+    organizationId: string,
+    from: Date,
+    to: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    return AccountingEngine.getProfitAndLoss(organizationId, from, to, branchId);
   }
 
-  static async getCashFlow(organizationId: string, from: Date, to: Date) {
-    return AccountingEngine.getCashFlow(organizationId, from, to);
+  static async getCashFlow(
+    organizationId: string,
+    from: Date,
+    to: Date,
+    branchId?: string | { in: string[] },
+  ) {
+    return AccountingEngine.getCashFlow(organizationId, from, to, branchId);
   }
 
   static async getReceivablesAging(organizationId: string, asOf: Date) {

@@ -30,4 +30,5 @@ export const TENANT_SCOPED_MODELS = new Set([
   "GiftCard",
   "Promotion",
   "StockCount",
+  "BranchProduct",
 ]);

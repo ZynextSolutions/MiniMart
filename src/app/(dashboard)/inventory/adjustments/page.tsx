@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { WarehouseService } from "@/features/warehouses/services/warehouse.service";
 import { AdjustmentForm } from "@/features/inventory/components/adjustment-form";
@@ -9,7 +9,7 @@ export default async function AdjustmentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.ADJUST);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.ADJUST);
 
   const warehouses = await WarehouseService.list(
     session.user.organizationId,

@@ -1,15 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ALL_BRANCHES_PARAM } from "@/lib/auth/branch-access";
 
 interface ReportDateFilterProps {
   mode: "asOf" | "range";
   defaultAsOf?: string;
   defaultFrom?: string;
   defaultTo?: string;
+  defaultBranchId?: string;
+  branches?: { id: string; name: string }[];
 }
 
 export function ReportDateFilter({
@@ -17,9 +28,16 @@ export function ReportDateFilter({
   defaultAsOf,
   defaultFrom,
   defaultTo,
+  defaultBranchId,
+  branches = [],
 }: ReportDateFilterProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [branchId, setBranchId] = useState(defaultBranchId ?? ALL_BRANCHES_PARAM);
+
+  useEffect(() => {
+    setBranchId(defaultBranchId ?? ALL_BRANCHES_PARAM);
+  }, [defaultBranchId]);
 
   function apply(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,6 +52,10 @@ export function ReportDateFilter({
       const to = form.get("to") as string;
       if (from) params.set("from", from);
       if (to) params.set("to", to);
+    }
+
+    if (branches.length > 0 && branchId) {
+      params.set("branchId", branchId);
     }
 
     router.push(`?${params.toString()}`);
@@ -79,6 +101,26 @@ export function ReportDateFilter({
           </div>
         </>
       )}
+
+      {branches.length > 1 && (
+        <div className="space-y-1">
+          <Label htmlFor="branchId">Branch</Label>
+          <Select value={branchId} onValueChange={setBranchId}>
+            <SelectTrigger id="branchId" className="w-44">
+              <SelectValue placeholder="All branches" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_BRANCHES_PARAM}>All branches</SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <Button type="submit">Apply</Button>
     </form>
   );

@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { TaxRateService } from "@/features/tax-rates/services/tax-rate.service";
 import { TaxSettingsService } from "@/lib/services/tax-settings-service";
@@ -25,7 +24,7 @@ const taxModeSchema = z.enum(["EXCLUSIVE", "INCLUSIVE"]);
 
 export async function listTaxRatesAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.TAX_MANAGE);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.TAX_MANAGE);
   const taxRates = await TaxRateService.list(session.user.organizationId);
   return taxRates.map((taxRate) => ({
     id: taxRate.id,
@@ -39,14 +38,14 @@ export async function listTaxRatesAction() {
 
 export async function getTaxModeAction(): Promise<TaxMode> {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.TAX_MANAGE);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.TAX_MANAGE);
   return TaxSettingsService.getTaxMode(session.user.organizationId);
 }
 
 export async function updateTaxModeAction(mode: TaxMode) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.TAX_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.TAX_MANAGE);
     const parsedMode = taxModeSchema.parse(mode);
     await TaxSettingsService.setTaxMode(session.user.organizationId, parsedMode);
     revalidatePath("/settings/taxes");
@@ -62,7 +61,7 @@ export async function updateTaxModeAction(mode: TaxMode) {
 export async function createTaxRateAction(input: z.infer<typeof schema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.TAX_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.TAX_MANAGE);
     const data = schema.parse(input);
     const taxRate = await TaxRateService.create(
       { ...data, organizationId: session.user.organizationId },
@@ -78,7 +77,7 @@ export async function createTaxRateAction(input: z.infer<typeof schema>) {
 export async function updateTaxRateAction(input: z.infer<typeof updateSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.TAX_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.TAX_MANAGE);
     const { id, ...data } = updateSchema.parse(input);
     const taxRate = await TaxRateService.update(
       id,
@@ -96,7 +95,7 @@ export async function updateTaxRateAction(input: z.infer<typeof updateSchema>) {
 export async function deleteTaxRateAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.TAX_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.TAX_MANAGE);
     await TaxRateService.softDelete(id, session.user.organizationId, session.user.id);
     revalidatePath("/settings/taxes");
     return { success: true };

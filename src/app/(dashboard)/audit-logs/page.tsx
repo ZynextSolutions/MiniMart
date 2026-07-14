@@ -1,6 +1,6 @@
-import { auth } from "@/lib/auth/auth";
-import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorizeSession, requireSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
+import { getUserBranches } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { prisma } from "@/infrastructure/database/prisma";
 import { format } from "date-fns";
@@ -13,15 +13,28 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DashboardBranchFilter } from "@/features/dashboard/components/dashboard-branch-filter";
 
-export default async function AuditLogsPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
+interface Props {
+  searchParams: Promise<{ branchId?: string }>;
+}
 
-  await authorize(session.user.id, PERMISSIONS.AUDIT.VIEW);
+export default async function AuditLogsPage({ searchParams }: Props) {
+  const session = await requireSession();
+  await authorizeSession(session, PERMISSIONS.AUDIT.VIEW);
+  const params = await searchParams;
+  const branchFilter = resolveSessionBranchFilter(session.user, params.branchId);
+  const branches = await getUserBranches(session.user.id);
 
   const logs = await prisma.auditLog.findMany({
-    where: { organizationId: session.user.organizationId },
+    where: {
+      organizationId: session.user.organizationId,
+      OR: [
+        { branchId: branchFilter },
+        // Org-level events (no branch) stay visible for authorized users.
+        { branchId: null },
+      ],
+    },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {
@@ -31,11 +44,18 @@ export default async function AuditLogsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
-        <p className="text-muted-foreground">
-          Immutable record of system actions
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
+          <p className="text-muted-foreground">
+            Immutable record of system actions
+          </p>
+        </div>
+        <DashboardBranchFilter
+          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+          selectedBranchId={params.branchId ?? session.user.branchId ?? undefined}
+          allEncoding="param"
+        />
       </div>
 
       <div className="rounded-md border">

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { AccountingQueryService } from "@/features/accounting/services/accounting-query.service";
 import { BankPageClient } from "@/features/accounting/components/bank-page-client";
@@ -13,7 +13,7 @@ export default async function BankPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.ACCOUNTING.BANK_MANAGE);
+  await authorizeSession(session, PERMISSIONS.ACCOUNTING.BANK_MANAGE);
 
   const params = await searchParams;
   const bankAccounts = await AccountingQueryService.listBankAccounts(session.user.organizationId);

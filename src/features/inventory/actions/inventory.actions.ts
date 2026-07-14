@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { getErrorMessage } from "@/lib/errors/app-error";
 import { InventoryService } from "@/lib/services/inventory-service";
@@ -60,19 +60,26 @@ export async function listStockLevelsAction(params: {
   search?: string;
   lowStockOnly?: boolean;
   page?: number;
+  branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.VIEW);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.VIEW);
+  const { branchId, ...rest } = params;
   return InventoryQueryService.listStockLevels({
     organizationId: session.user.organizationId,
-    ...params,
+    branchId: resolveSessionBranchFilter(session.user, branchId),
+    ...rest,
   });
 }
 
-export async function getValuationAction(warehouseId?: string) {
+export async function getValuationAction(warehouseId?: string, branchId?: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.VIEW);
-  return InventoryQueryService.getValuation(session.user.organizationId, warehouseId);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.VIEW);
+  return InventoryQueryService.getValuation(
+    session.user.organizationId,
+    warehouseId,
+    resolveSessionBranchFilter(session.user, branchId),
+  );
 }
 
 export async function getLedgerAction(params: {
@@ -81,11 +88,13 @@ export async function getLedgerAction(params: {
   from?: string;
   to?: string;
   page?: number;
+  branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.LEDGER_VIEW);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.LEDGER_VIEW);
   return InventoryQueryService.getLedger({
     organizationId: session.user.organizationId,
+    branchId: resolveSessionBranchFilter(session.user, params.branchId),
     warehouseId: params.warehouseId,
     variantId: params.variantId,
     from: params.from ? new Date(params.from) : undefined,
@@ -98,11 +107,13 @@ export async function listMovementsAction(params: {
   movementType?: string;
   warehouseId?: string;
   page?: number;
+  branchId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.VIEW);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.VIEW);
   return InventoryQueryService.listMovements({
     organizationId: session.user.organizationId,
+    branchId: resolveSessionBranchFilter(session.user, params.branchId),
     warehouseId: params.warehouseId,
     page: params.page,
     ...(params.movementType ? { movementType: params.movementType as never } : {}),
@@ -111,14 +122,24 @@ export async function listMovementsAction(params: {
 
 export async function searchVariantsAction(query: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.VIEW);
-  return InventoryQueryService.searchVariants(session.user.organizationId, query);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.VIEW);
+  const variants = await InventoryQueryService.searchVariants(
+    session.user.organizationId,
+    query,
+  );
+  return variants.map((variant) => ({
+    id: variant.id,
+    sku: variant.sku,
+    name: variant.name,
+    costPrice: Number(variant.costPrice),
+    product: variant.product,
+  }));
 }
 
 export async function stockInAction(input: z.infer<typeof movementSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_IN);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_IN);
     const data = movementSchema.parse(input);
     const movement = await InventoryService.stockIn(
       { ...data, movementDate: new Date(data.movementDate) },
@@ -134,7 +155,7 @@ export async function stockInAction(input: z.infer<typeof movementSchema>) {
 export async function stockOutAction(input: z.infer<typeof movementSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_OUT);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_OUT);
     const data = movementSchema.parse(input);
     const movement = await InventoryService.stockOut(
       { ...data, movementDate: new Date(data.movementDate) },
@@ -150,7 +171,7 @@ export async function stockOutAction(input: z.infer<typeof movementSchema>) {
 export async function adjustStockAction(input: z.infer<typeof adjustSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.ADJUST);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.ADJUST);
     const data = adjustSchema.parse(input);
     const result = await InventoryService.adjust(
       { ...data, movementDate: new Date(data.movementDate) },
@@ -166,7 +187,7 @@ export async function adjustStockAction(input: z.infer<typeof adjustSchema>) {
 export async function transferStockAction(input: z.infer<typeof transferSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.TRANSFER);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.TRANSFER);
     const data = transferSchema.parse(input);
     const result = await InventoryService.transfer(
       { ...data, movementDate: new Date(data.movementDate) },
@@ -182,11 +203,12 @@ export async function transferStockAction(input: z.infer<typeof transferSchema>)
 export async function initializeStockLevelsAction(warehouseId: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.ADJUST);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.ADJUST);
     const result = await InventoryService.initializeStockLevels(
       warehouseId,
       session.user.organizationId,
       session.user.id,
+      session.user.branchId,
     );
     revalidatePath("/inventory");
     return { success: true, ...result };
@@ -202,7 +224,7 @@ export async function createStockCountAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
     const stockCount = await InventoryService.createStockCount(
       { ...input, countDate: new Date(input.countDate) },
       serviceContext(session),
@@ -220,7 +242,7 @@ export async function updateStockCountLinesAction(
 ) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
     await InventoryService.updateStockCountLines(
       stockCountId,
       lines,
@@ -236,7 +258,7 @@ export async function updateStockCountLinesAction(
 export async function completeStockCountAction(stockCountId: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+    await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
     await InventoryService.completeStockCount(stockCountId, serviceContext(session));
     revalidatePath("/inventory");
     revalidatePath("/inventory/stock-count");
@@ -248,18 +270,18 @@ export async function completeStockCountAction(stockCountId: string) {
 
 export async function listStockCountsAction(warehouseId?: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
   return InventoryQueryService.listStockCounts(session.user.organizationId, warehouseId);
 }
 
 export async function getStockCountAction(id: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
   return InventoryQueryService.getStockCount(id, session.user.organizationId);
 }
 
 export async function getInventorySummaryAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.VIEW);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.VIEW);
   return InventoryQueryService.getSummary(session.user.organizationId);
 }

@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { UnitService } from "@/features/units/services/unit.service";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -17,14 +16,14 @@ const updateSchema = schema.partial().extend({ id: z.string().uuid(), isActive: 
 
 export async function listUnitsAction(search?: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.UNITS.MANAGE);
+  await authorizeSession(session, PERMISSIONS.UNITS.MANAGE);
   return UnitService.list(session.user.organizationId, search);
 }
 
 export async function createUnitAction(input: z.infer<typeof schema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.UNITS.MANAGE);
+    await authorizeSession(session, PERMISSIONS.UNITS.MANAGE);
     const data = schema.parse(input);
     const unit = await UnitService.create(
       { ...data, organizationId: session.user.organizationId },
@@ -40,7 +39,7 @@ export async function createUnitAction(input: z.infer<typeof schema>) {
 export async function updateUnitAction(input: z.infer<typeof updateSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.UNITS.MANAGE);
+    await authorizeSession(session, PERMISSIONS.UNITS.MANAGE);
     const { id, ...data } = updateSchema.parse(input);
     const unit = await UnitService.update(id, session.user.organizationId, data, session.user.id);
     revalidatePath("/units");
@@ -53,7 +52,7 @@ export async function updateUnitAction(input: z.infer<typeof updateSchema>) {
 export async function deleteUnitAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.UNITS.MANAGE);
+    await authorizeSession(session, PERMISSIONS.UNITS.MANAGE);
     await UnitService.softDelete(id, session.user.organizationId, session.user.id);
     revalidatePath("/units");
     return { success: true };

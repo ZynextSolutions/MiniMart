@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
+import { authorizeSession } from "@/lib/auth/session";
 import type { NotificationType } from "@prisma/client";
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { NOTIFICATION_FILTER_TYPES } from "@/lib/constants/notifications";
 import { NotificationService } from "@/lib/services/notification-service";
@@ -19,7 +19,7 @@ export default async function NotificationsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  await authorize(session.user.id, PERMISSIONS.NOTIFICATIONS.VIEW);
+  await authorizeSession(session, PERMISSIONS.NOTIFICATIONS.VIEW);
 
   const params = await searchParams;
   const typeFilter = NOTIFICATION_FILTER_TYPES.includes(params.type as NotificationType)

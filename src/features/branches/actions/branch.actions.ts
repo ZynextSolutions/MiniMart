@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { BranchService } from "@/features/branches/services/branch.service";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -24,14 +23,14 @@ const updateSchema = schema.partial().extend({
 
 export async function listBranchesAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
+  await authorizeSession(session, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
   return BranchService.list(session.user.organizationId);
 }
 
 export async function createBranchAction(input: z.infer<typeof schema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
     const data = schema.parse(input);
     const branch = await BranchService.create(
       { ...data, organizationId: session.user.organizationId, email: data.email || undefined },
@@ -47,7 +46,7 @@ export async function createBranchAction(input: z.infer<typeof schema>) {
 export async function updateBranchAction(input: z.infer<typeof updateSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
     const { id, ...data } = updateSchema.parse(input);
     const branch = await BranchService.update(
       id,
@@ -65,7 +64,7 @@ export async function updateBranchAction(input: z.infer<typeof updateSchema>) {
 export async function deleteBranchAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
+    await authorizeSession(session, PERMISSIONS.SETTINGS.BRANCH_MANAGE);
     await BranchService.softDelete(id, session.user.organizationId, session.user.id);
     revalidatePath("/settings/branches");
     return { success: true };

@@ -79,20 +79,20 @@ export function KpiCards({ kpis, currency }: KpiCardsProps) {
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {cards.map((kpi) => {
         const Icon = kpi.icon;
         const content = (
           <Card className={kpi.href ? "transition-colors hover:bg-muted/50" : undefined}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
               <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
               <Icon
                 className={`h-4 w-4 ${kpi.alert ? "text-amber-600" : "text-muted-foreground"}`}
               />
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0">
               <div
-                className={`text-2xl font-bold ${kpi.alert ? "text-amber-600" : ""}`}
+                className={`text-xl font-bold ${kpi.alert ? "text-amber-600" : ""}`}
               >
                 {kpi.value}
               </div>

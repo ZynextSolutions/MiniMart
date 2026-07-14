@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ALL_BRANCHES_PARAM } from "@/lib/auth/branch-access";
 
 interface ReportFiltersBarProps {
   mode: "asOf" | "range";
@@ -39,10 +40,10 @@ export function ReportFiltersBar({
 }: ReportFiltersBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [branchId, setBranchId] = useState(defaultBranchId ?? "all");
+  const [branchId, setBranchId] = useState(defaultBranchId ?? ALL_BRANCHES_PARAM);
 
   useEffect(() => {
-    setBranchId(defaultBranchId ?? "all");
+    setBranchId(defaultBranchId ?? ALL_BRANCHES_PARAM);
   }, [defaultBranchId]);
 
   function apply(e: React.FormEvent<HTMLFormElement>) {
@@ -60,7 +61,8 @@ export function ReportFiltersBar({
       if (to) params.set("to", to);
     }
 
-    if (branchId && branchId !== "all") params.set("branchId", branchId);
+    // Persist explicit "all" so server can distinguish from active-branch default.
+    if (branchId) params.set("branchId", branchId);
     else params.delete("branchId");
 
     router.push(`?${params.toString()}`);
@@ -123,7 +125,7 @@ export function ReportFiltersBar({
               <SelectValue placeholder="All branches" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All branches</SelectItem>
+              <SelectItem value={ALL_BRANCHES_PARAM}>All branches</SelectItem>
               {branches.map((b) => (
                 <SelectItem key={b.id} value={b.id}>
                   {b.name}

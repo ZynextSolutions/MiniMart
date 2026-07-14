@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { AccountingQueryService } from "@/features/accounting/services/accounting-query.service";
 import { AgingReportClient } from "@/features/accounting/components/aging-report-client";
@@ -13,7 +13,7 @@ export default async function PayablesPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
 
   const params = await searchParams;
   const asOf = params.asOf ?? new Date().toISOString().slice(0, 10);

@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { RoleService } from "@/features/roles/services/role.service";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -21,7 +20,7 @@ const updateRoleSchema = createRoleSchema.partial().extend({
 export async function createRoleAction(input: z.infer<typeof createRoleSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.ROLES.MANAGE);
+    await authorizeSession(session, PERMISSIONS.ROLES.MANAGE);
 
     const data = createRoleSchema.parse(input);
     const role = await RoleService.create(
@@ -39,7 +38,7 @@ export async function createRoleAction(input: z.infer<typeof createRoleSchema>) 
 export async function updateRoleAction(input: z.infer<typeof updateRoleSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.ROLES.MANAGE);
+    await authorizeSession(session, PERMISSIONS.ROLES.MANAGE);
 
     const data = updateRoleSchema.parse(input);
     const { id, ...updateData } = data;
@@ -60,7 +59,7 @@ export async function updateRoleAction(input: z.infer<typeof updateRoleSchema>) 
 export async function deleteRoleAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.ROLES.MANAGE);
+    await authorizeSession(session, PERMISSIONS.ROLES.MANAGE);
 
     await RoleService.softDelete(id, session.user.organizationId, session.user.id);
     revalidatePath("/settings/roles");
@@ -72,12 +71,27 @@ export async function deleteRoleAction(id: string) {
 
 export async function listRolesAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.ROLES.VIEW);
+  await authorizeSession(session, PERMISSIONS.ROLES.VIEW);
   return RoleService.list(session.user.organizationId);
 }
 
 export async function listPermissionsAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.ROLES.VIEW);
+  await authorizeSession(session, PERMISSIONS.ROLES.VIEW);
   return RoleService.listPermissions();
+}
+
+/** Reset all system roles to ROLE_PERMISSION_MAP defaults (overwrites edits). */
+export async function syncSystemRolesAction() {
+  try {
+    const session = await requireSession();
+    await authorizeSession(session, PERMISSIONS.ROLES.MANAGE);
+    await RoleService.syncSystemRolePermissions(session.user.organizationId, {
+      actorId: session.user.id,
+    });
+    revalidatePath("/settings/roles");
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, error: getErrorMessage(error) };
+  }
 }

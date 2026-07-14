@@ -44,9 +44,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       }
 
       if (trigger === "update" && session) {
-        if (session.user?.branchId) token.branchId = session.user.branchId;
-        if (session.user?.permissions) token.permissions = session.user.permissions;
-        if (session.user?.currency) token.currency = session.user.currency;
+        // update() may pass flat fields or nested under session.user
+        const nextBranchId = session.user?.branchId ?? session.branchId;
+        const nextPermissions = session.user?.permissions ?? session.permissions;
+        const nextCurrency = session.user?.currency ?? session.currency;
+        if (nextBranchId) token.branchId = nextBranchId;
+        if (nextPermissions) token.permissions = nextPermissions;
+        if (nextCurrency) token.currency = nextCurrency;
       }
 
       if (token.sessionType === "platform" && token.id && !user) {

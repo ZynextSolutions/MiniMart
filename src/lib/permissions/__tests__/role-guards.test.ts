@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ConflictError, ValidationError } from "@/lib/errors/app-error";
+import { ValidationError } from "@/lib/errors/app-error";
 import {
   assertRoleAssignable,
-  assertSystemRolePermissionsEditable,
+  assertSystemRoleRenameAllowed,
 } from "@/lib/permissions/role-guards";
 import { SYSTEM_ROLES } from "@/lib/permissions/roles";
 
@@ -15,13 +15,21 @@ describe("role guards", () => {
     expect(() => assertRoleAssignable(SYSTEM_ROLES.CASHIER)).not.toThrow();
   });
 
-  it("blocks system role permission edits", () => {
-    expect(() => assertSystemRolePermissionsEditable(true, ["perm-1"])).toThrow(
-      ConflictError,
-    );
+  it("blocks renaming system roles", () => {
+    expect(() =>
+      assertSystemRoleRenameAllowed(true, SYSTEM_ROLES.MANAGER, "Ops Lead"),
+    ).toThrow(ValidationError);
   });
 
-  it("allows custom role permission edits", () => {
-    expect(() => assertSystemRolePermissionsEditable(false, ["perm-1"])).not.toThrow();
+  it("allows keeping the same system role name", () => {
+    expect(() =>
+      assertSystemRoleRenameAllowed(true, SYSTEM_ROLES.MANAGER, SYSTEM_ROLES.MANAGER),
+    ).not.toThrow();
+  });
+
+  it("allows renaming custom roles", () => {
+    expect(() =>
+      assertSystemRoleRenameAllowed(false, "Custom", "Custom 2"),
+    ).not.toThrow();
   });
 });

@@ -582,6 +582,7 @@ export class ReportService {
   static async getStockOnHand(filters: ReportFilters & { warehouseId?: string; search?: string }) {
     return InventoryQueryService.listStockLevels({
       organizationId: filters.organizationId,
+      branchId: filters.branchId,
       warehouseId: filters.warehouseId,
       search: filters.search,
       page: filters.page ?? 1,
@@ -590,7 +591,11 @@ export class ReportService {
   }
 
   static async getInventoryValuation(filters: ReportFilters & { warehouseId?: string }) {
-    const rows = await InventoryQueryService.getValuation(filters.organizationId, filters.warehouseId);
+    const rows = await InventoryQueryService.getValuation(
+      filters.organizationId,
+      filters.warehouseId,
+      filters.branchId,
+    );
     const totalValue = rows.reduce((s, r) => s + toNum(r.totalValue), 0);
     return { rows, totalValue };
   }
@@ -601,6 +606,7 @@ export class ReportService {
         organizationId: filters.organizationId,
         status: "COMPLETED",
         movementDate: { gte: filters.from, lte: filters.to },
+        ...branchWhere(filters.branchId),
         ...(filters.warehouseId ? { warehouseId: filters.warehouseId } : {}),
       },
       include: {

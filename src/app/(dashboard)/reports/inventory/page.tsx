@@ -1,11 +1,9 @@
-import { auth } from "@/lib/auth/auth";
-import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
+import { authorizeSession, requireSession } from "@/lib/auth/session";
+import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
+import { getUserBranches } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService } from "@/features/reports/services/report.service";
-import {
-  InventoryReportClient,
-} from "@/features/reports/components/inventory-report-client";
+import { InventoryReportClient } from "@/features/reports/components/inventory-report-client";
 import {
   mapStockRows,
   mapValuationRows,
@@ -13,7 +11,12 @@ import {
 import { formatMoney } from "@/lib/utils/format";
 
 interface Props {
-  searchParams: Promise<{ view?: string; from?: string; to?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    from?: string;
+    to?: string;
+    branchId?: string;
+  }>;
 }
 
 function parseDateStart(date: string): Date {
@@ -25,9 +28,8 @@ function parseDateEnd(date: string): Date {
 }
 
 export default async function InventoryReportPage({ searchParams }: Props) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  await authorize(session.user.id, PERMISSIONS.REPORTS.INVENTORY);
+  const session = await requireSession();
+  await authorizeSession(session, PERMISSIONS.REPORTS.INVENTORY);
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
@@ -35,18 +37,26 @@ export default async function InventoryReportPage({ searchParams }: Props) {
   const from = params.from ?? monthStart;
   const to = params.to ?? today;
   const view = params.view ?? "stock";
+  const branchId = resolveSessionBranchFilter(session.user, params.branchId);
+  const branches = await getUserBranches(session.user.id);
 
-  const orgId = session.user.organizationId;
-  const dateFilters = {
-    organizationId: orgId,
+  const filters = {
+    organizationId: session.user.organizationId,
+    branchId,
     from: parseDateStart(from),
     to: parseDateEnd(to),
   };
 
   const [stock, valuation, movement] = await Promise.all([
-    view === "stock" ? ReportService.getStockOnHand({ ...dateFilters, pageSize: 100 }) : Promise.resolve(null),
-    view === "valuation" ? ReportService.getInventoryValuation(dateFilters) : Promise.resolve(null),
-    view === "movement" ? ReportService.getInventoryMovement(dateFilters) : Promise.resolve(null),
+    view === "stock"
+      ? ReportService.getStockOnHand({ ...filters, pageSize: 100 })
+      : Promise.resolve(null),
+    view === "valuation"
+      ? ReportService.getInventoryValuation(filters)
+      : Promise.resolve(null),
+    view === "movement"
+      ? ReportService.getInventoryMovement(filters)
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -59,6 +69,8 @@ export default async function InventoryReportPage({ searchParams }: Props) {
         view={view}
         from={from}
         to={to}
+        defaultBranchId={params.branchId ?? session.user.branchId ?? undefined}
+        branches={branches.map((b) => ({ id: b.id, name: b.name }))}
         stockRows={stock ? mapStockRows(stock.levels, session.user.currency) : undefined}
         valuationRows={
           valuation ? mapValuationRows(valuation.rows, session.user.currency) : undefined

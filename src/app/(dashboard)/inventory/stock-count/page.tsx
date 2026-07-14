@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { InventoryQueryService } from "@/features/inventory/services/inventory-query.service";
 import { WarehouseService } from "@/features/warehouses/services/warehouse.service";
@@ -10,7 +10,7 @@ export default async function StockCountPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.INVENTORY.STOCK_COUNT);
+  await authorizeSession(session, PERMISSIONS.INVENTORY.STOCK_COUNT);
 
   const [stockCounts, warehouses] = await Promise.all([
     InventoryQueryService.listStockCounts(session.user.organizationId),

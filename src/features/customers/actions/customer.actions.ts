@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { CustomerService } from "@/features/customers/services/customer.service";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -24,15 +23,18 @@ const updateSchema = schema.partial().extend({
 
 export async function listCustomersAction(params?: { search?: string; page?: number }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.CUSTOMERS.VIEW);
+  await authorizeSession(session, PERMISSIONS.CUSTOMERS.VIEW);
   return CustomerService.list(session.user.organizationId, params);
 }
 
 export async function createCustomerAction(input: z.infer<typeof schema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.CUSTOMERS.MANAGE);
+    await authorizeSession(session, PERMISSIONS.CUSTOMERS.MANAGE);
     const data = schema.parse(input);
+    if (data.creditLimit !== undefined && data.creditLimit > 0) {
+      await authorizeSession(session, PERMISSIONS.CUSTOMERS.CREDIT_MANAGE);
+    }
     const customer = await CustomerService.create(
       {
         organizationId: session.user.organizationId,
@@ -51,8 +53,11 @@ export async function createCustomerAction(input: z.infer<typeof schema>) {
 export async function updateCustomerAction(input: z.infer<typeof updateSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.CUSTOMERS.MANAGE);
+    await authorizeSession(session, PERMISSIONS.CUSTOMERS.MANAGE);
     const { id, ...data } = updateSchema.parse(input);
+    if (data.creditLimit !== undefined) {
+      await authorizeSession(session, PERMISSIONS.CUSTOMERS.CREDIT_MANAGE);
+    }
     const customer = await CustomerService.update(
       id,
       session.user.organizationId,
@@ -69,7 +74,7 @@ export async function updateCustomerAction(input: z.infer<typeof updateSchema>) 
 export async function deleteCustomerAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.CUSTOMERS.MANAGE);
+    await authorizeSession(session, PERMISSIONS.CUSTOMERS.MANAGE);
     await CustomerService.softDelete(id, session.user.organizationId, session.user.id);
     revalidatePath("/customers");
     return { success: true };

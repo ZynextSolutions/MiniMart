@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ProductService } from "@/features/products/services/product.service";
 import { BarcodeService } from "@/lib/services/barcode-service";
@@ -41,7 +40,7 @@ export async function listProductsAction(params?: {
   brandId?: string;
 }) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PRODUCTS.VIEW);
+  await authorizeSession(session, PERMISSIONS.PRODUCTS.VIEW);
   return ProductService.list({
     organizationId: session.user.organizationId,
     ...params,
@@ -50,14 +49,14 @@ export async function listProductsAction(params?: {
 
 export async function getProductAction(id: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.PRODUCTS.VIEW);
+  await authorizeSession(session, PERMISSIONS.PRODUCTS.VIEW);
   return ProductService.getById(id, session.user.organizationId);
 }
 
 export async function createProductAction(input: z.infer<typeof createSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PRODUCTS.CREATE);
+    await authorizeSession(session, PERMISSIONS.PRODUCTS.CREATE);
     const data = createSchema.parse(input);
     const product = await ProductService.create(
       {
@@ -73,7 +72,7 @@ export async function createProductAction(input: z.infer<typeof createSchema>) {
       session.user.id,
     );
     revalidatePath("/products");
-    return { success: true, product };
+    return { success: true, productId: product.id };
   } catch (e) {
     return { success: false, error: getErrorMessage(e) };
   }
@@ -82,7 +81,7 @@ export async function createProductAction(input: z.infer<typeof createSchema>) {
 export async function updateProductAction(input: z.infer<typeof updateSchema>) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PRODUCTS.UPDATE);
+    await authorizeSession(session, PERMISSIONS.PRODUCTS.UPDATE);
     const { id, ...data } = updateSchema.parse(input);
     const product = await ProductService.update(
       id,
@@ -100,7 +99,7 @@ export async function updateProductAction(input: z.infer<typeof updateSchema>) {
     );
     revalidatePath("/products");
     revalidatePath(`/products/${id}`);
-    return { success: true, product };
+    return { success: true, productId: product.id };
   } catch (e) {
     return { success: false, error: getErrorMessage(e) };
   }
@@ -109,7 +108,7 @@ export async function updateProductAction(input: z.infer<typeof updateSchema>) {
 export async function deleteProductAction(id: string) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.PRODUCTS.DELETE);
+    await authorizeSession(session, PERMISSIONS.PRODUCTS.DELETE);
     await ProductService.softDelete(id, session.user.organizationId, session.user.id);
     revalidatePath("/products");
     return { success: true };
@@ -120,7 +119,7 @@ export async function deleteProductAction(id: string) {
 
 export async function generateBarcodeAction(type: "INTERNAL" | "EAN13" = "INTERNAL") {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.BARCODE.GENERATE);
+  await authorizeSession(session, PERMISSIONS.BARCODE.GENERATE);
   const code =
     type === "EAN13"
       ? await BarcodeService.generateEAN13()
@@ -136,7 +135,7 @@ export async function addProductBarcodeAction(input: {
 }) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.BARCODE.GENERATE);
+    await authorizeSession(session, PERMISSIONS.BARCODE.GENERATE);
     const barcode = await ProductService.addBarcode(
       input.productId,
       session.user.organizationId,

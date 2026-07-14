@@ -19,6 +19,8 @@ interface ProfitLossClientProps {
   netIncome: number;
   from: string;
   to: string;
+  defaultBranchId?: string;
+  branches?: { id: string; name: string }[];
 }
 
 export function ProfitLossClient({
@@ -29,10 +31,18 @@ export function ProfitLossClient({
   netIncome,
   from,
   to,
+  defaultBranchId,
+  branches,
 }: ProfitLossClientProps) {
   return (
     <div className="space-y-6">
-      <ReportDateFilter mode="range" defaultFrom={from} defaultTo={to} />
+      <ReportDateFilter
+        mode="range"
+        defaultFrom={from}
+        defaultTo={to}
+        defaultBranchId={defaultBranchId}
+        branches={branches}
+      />
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2">

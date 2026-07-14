@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { AccountingQueryService } from "@/features/accounting/services/accounting-query.service";
 import { CoaPageClient } from "@/features/accounting/components/coa-page-client";
@@ -9,7 +9,7 @@ export default async function ChartOfAccountsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.ACCOUNTING.COA_VIEW);
+  await authorizeSession(session, PERMISSIONS.ACCOUNTING.COA_VIEW);
 
   const accounts = await AccountingQueryService.listAccounts(session.user.organizationId);
   const tree = AccountingQueryService.buildAccountTree(accounts);

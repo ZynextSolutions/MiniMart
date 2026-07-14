@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { CategoryService } from "@/features/categories/services/category.service";
 import { BrandService } from "@/features/brands/services/brand.service";
@@ -13,7 +13,7 @@ export default async function NewProductPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.PRODUCTS.CREATE);
+  await authorizeSession(session, PERMISSIONS.PRODUCTS.CREATE);
 
   const orgId = session.user.organizationId;
 

@@ -15,6 +15,8 @@ import {
   ClipboardList,
   Bell,
   Store,
+  Layers,
+  Boxes,
 } from "lucide-react";
 
 export interface NavItem {
@@ -29,6 +31,7 @@ export interface NavItem {
 
 export interface NavGroup {
   title: string;
+  icon: React.ComponentType<{ className?: string }>;
   items: NavItem[];
 }
 
@@ -195,22 +198,27 @@ export const mainNavItems: NavItem[] = [
 export const mainNavGroups: NavGroup[] = [
   {
     title: "Overview",
+    icon: LayoutDashboard,
     items: [mainNavItems[0]],
   },
   {
     title: "Sales",
+    icon: ShoppingCart,
     items: [mainNavItems[1], mainNavItems[2], mainNavItems[10]],
   },
   {
     title: "Catalog",
+    icon: Layers,
     items: [mainNavItems[3], mainNavItems[4], mainNavItems[5], mainNavItems[6], mainNavItems[15]],
   },
   {
     title: "Operations",
+    icon: Boxes,
     items: [mainNavItems[7], mainNavItems[8], mainNavItems[9]],
   },
   {
     title: "Finance & Reports",
+    icon: BarChart3,
     items: [mainNavItems[11], mainNavItems[14]],
   },
 ];
@@ -233,6 +241,12 @@ export const settingsNavItems: NavItem[] = [
     href: "/settings/warehouses",
     icon: Warehouse,
     permission: "settings.warehouse.manage",
+  },
+  {
+    title: "Assortment",
+    href: "/settings/assortment",
+    icon: Package,
+    permission: "products.update",
   },
   {
     title: "Tax Rates",

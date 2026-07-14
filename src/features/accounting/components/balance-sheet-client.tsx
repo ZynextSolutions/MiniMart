@@ -22,6 +22,8 @@ interface BalanceSheetClientProps {
   totalEquity: number;
   totalLiabilitiesAndEquity: number;
   asOf: string;
+  defaultBranchId?: string;
+  branches?: { id: string; name: string }[];
 }
 
 function SectionTable({
@@ -64,10 +66,17 @@ export function BalanceSheetClient({
   totalEquity,
   totalLiabilitiesAndEquity,
   asOf,
+  defaultBranchId,
+  branches,
 }: BalanceSheetClientProps) {
   return (
     <div className="space-y-6">
-      <ReportDateFilter mode="asOf" defaultAsOf={asOf} />
+      <ReportDateFilter
+        mode="asOf"
+        defaultAsOf={asOf}
+        defaultBranchId={defaultBranchId}
+        branches={branches}
+      />
       <SectionTable title="Assets" rows={sections.assets} total={totalAssets} />
       <SectionTable title="Liabilities" rows={sections.liabilities} total={totalLiabilities} />
       <SectionTable title="Equity" rows={sections.equity} total={totalEquity} />

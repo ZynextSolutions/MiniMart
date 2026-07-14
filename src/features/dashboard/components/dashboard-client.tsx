@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { KpiCards } from "./kpi-cards";
 import {
   PaymentBreakdownChart,
@@ -17,14 +18,23 @@ interface DashboardClientProps {
   data: DashboardData;
   userName: string;
   currency: string;
+  branchFilter?: ReactNode;
 }
 
-export function DashboardClient({ data, userName, currency }: DashboardClientProps) {
+export function DashboardClient({
+  data,
+  userName,
+  currency,
+  branchFilter,
+}: DashboardClientProps) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, {userName}</p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">Welcome back, {userName}</p>
+        </div>
+        {branchFilter}
       </div>
 
       <KpiCards kpis={data.kpis} currency={currency} />

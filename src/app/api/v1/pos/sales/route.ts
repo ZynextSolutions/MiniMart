@@ -4,11 +4,16 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { apiErrorResponse } from "@/lib/auth/api-error-response";
 import { enforceApiRateLimit } from "@/lib/rate-limit";
+import { ValidationError } from "@/lib/errors/app-error";
 
 export async function GET(request: Request) {
   try {
     await enforceApiRateLimit(request, "pos-sales", 120);
     const session = await requireApiSession(PERMISSIONS.POS.SALE_RETURN);
+
+    if (!session.user.branchId) {
+      throw new ValidationError("No branch selected");
+    }
 
     const { searchParams } = new URL(request.url);
     const invoice = searchParams.get("invoice");
@@ -19,6 +24,7 @@ export async function GET(request: Request) {
     const sale = await prisma.sale.findFirst({
       where: {
         organizationId: session.user.organizationId,
+        branchId: session.user.branchId,
         invoiceNumber: invoice,
         deletedAt: null,
         saleType: "SALE",

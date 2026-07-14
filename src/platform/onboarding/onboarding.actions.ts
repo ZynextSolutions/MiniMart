@@ -6,6 +6,7 @@ import { OrganizationProvisioningService } from "@/platform/onboarding/organizat
 import { getPrismaBase } from "@/platform/tenant/tenant-prisma";
 import { getErrorMessage, ValidationError } from "@/lib/errors/app-error";
 import { strongPasswordSchema } from "@/lib/auth/password-schema";
+import { assertRoleAssignable } from "@/lib/permissions/role-guards";
 import { serializePlan } from "@/lib/utils/serialize-prisma";
 import bcrypt from "bcryptjs";
 import {
@@ -109,6 +110,19 @@ export async function acceptInviteAction(input: z.infer<typeof inviteAcceptSchem
     if (existing) {
       return { success: false, error: "User already exists in this organization" };
     }
+
+    const inviteRole = await prisma.role.findFirst({
+      where: {
+        id: invite.roleId,
+        organizationId: invite.organizationId,
+        deletedAt: null,
+      },
+      select: { name: true },
+    });
+    if (!inviteRole) {
+      return { success: false, error: "Invite is invalid or expired" };
+    }
+    assertRoleAssignable(inviteRole.name);
 
     const passwordHash = await bcrypt.hash(data.password, 12);
     await prisma.$transaction(async (tx) => {

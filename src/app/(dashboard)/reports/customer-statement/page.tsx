@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { CustomerService } from "@/features/customers/services/customer.service";
 import { ReportService } from "@/features/reports/services/report.service";
@@ -21,7 +21,7 @@ function parseDateEnd(date: string): Date {
 export default async function CustomerStatementPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  await authorize(session.user.id, PERMISSIONS.REPORTS.FINANCIAL);
+  await authorizeSession(session, PERMISSIONS.CUSTOMERS.STATEMENT_VIEW);
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireApiSession, type AuthSession } from "@/lib/auth/session";
+import { requireApiSession, type AuthSession, authorizeSession } from "@/lib/auth/session";
 import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ReportService } from "@/features/reports/services/report.service";
 import { apiErrorResponse } from "@/lib/auth/api-error-response";
@@ -311,14 +310,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "invoice-list") {
-      await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_INVOICE_LIST, {
-        branchId: session.user.branchId ?? undefined,
-      });
+      await authorizeSession(session, PERMISSIONS.REPORTS.SALES_INVOICE_LIST);
     }
     if (type === "return-list") {
-      await authorize(session.user.id, PERMISSIONS.REPORTS.SALES_RETURN_LIST, {
-        branchId: session.user.branchId ?? undefined,
-      });
+      await authorizeSession(session, PERMISSIONS.REPORTS.SALES_RETURN_LIST);
     }
 
     const filters = parseDateRange(searchParams, session);

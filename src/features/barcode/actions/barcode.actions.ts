@@ -1,7 +1,6 @@
 "use server";
 
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { BarcodeService } from "@/lib/services/barcode-service";
 import { BarcodeImageService } from "@/lib/services/barcode-image-service";
@@ -10,7 +9,7 @@ import { getErrorMessage } from "@/lib/errors/app-error";
 
 export async function searchProductsForLabelsAction(search?: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.BARCODE.GENERATE);
+  await authorizeSession(session, PERMISSIONS.BARCODE.GENERATE);
 
   const products = await BarcodeQueryService.listProductsForLabels(
     session.user.organizationId,
@@ -36,7 +35,7 @@ export async function generateBarcodeCodeAction(
 ) {
   try {
     const session = await requireSession();
-    await authorize(session.user.id, PERMISSIONS.BARCODE.GENERATE);
+    await authorizeSession(session, PERMISSIONS.BARCODE.GENERATE);
 
     if (type === "EAN13") {
       const code = value
@@ -67,7 +66,7 @@ export async function generateBarcodeCodeAction(
 
 export async function generateQrDataUrlAction(data: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.BARCODE.GENERATE);
+  await authorizeSession(session, PERMISSIONS.BARCODE.GENERATE);
   const result = await BarcodeImageService.generateQR(data);
   return result.dataUrl ?? "";
 }

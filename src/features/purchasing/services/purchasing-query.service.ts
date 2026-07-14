@@ -1,11 +1,21 @@
 import { prisma } from "@/infrastructure/database/prisma";
+import type { BranchFilter } from "@/lib/auth/branch-access";
+import { prismaBranchWhere } from "@/lib/auth/branch-access";
 import { SupplierLedgerService } from "@/lib/services/supplier-ledger-service";
 import type { Prisma } from "@prisma/client";
 
+export type PurchasingListFilters = {
+  organizationId: string;
+  branchId?: BranchFilter;
+  status?: string;
+};
+
 export class PurchasingQueryService {
-  static async listPurchaseRequests(organizationId: string) {
+  static async listPurchaseRequests(filters: PurchasingListFilters) {
+    // PurchaseRequest has no branchId; scope by creator's current assignments is weak.
+    // Keep org-wide for requests (planning docs) — no branch column to filter.
     return prisma.purchaseRequest.findMany({
-      where: { organizationId },
+      where: { organizationId: filters.organizationId },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { lines: true } } },
     });
@@ -39,15 +49,19 @@ export class PurchasingQueryService {
     };
   }
 
-  static async listPurchaseOrders(organizationId: string, status?: string) {
+  static async listPurchaseOrders(filters: PurchasingListFilters) {
     return prisma.purchaseOrder.findMany({
       where: {
-        organizationId,
-        ...(status ? { status: status as Prisma.EnumDocumentStatusFilter["equals"] } : {}),
+        organizationId: filters.organizationId,
+        ...prismaBranchWhere(filters.branchId),
+        ...(filters.status
+          ? { status: filters.status as Prisma.EnumDocumentStatusFilter["equals"] }
+          : {}),
       },
       orderBy: { createdAt: "desc" },
       include: {
         supplier: { select: { id: true, name: true, code: true } },
+        branch: { select: { id: true, name: true, code: true } },
         _count: { select: { lines: true, goodsReceipts: true } },
       },
     });
@@ -88,9 +102,26 @@ export class PurchasingQueryService {
     };
   }
 
-  static async listGoodsReceipts(organizationId: string) {
+  static async listGoodsReceipts(filters: PurchasingListFilters) {
+    let warehouseIds: string[] | undefined;
+    if (filters.branchId) {
+      const warehouses = await prisma.warehouse.findMany({
+        where: {
+          organizationId: filters.organizationId,
+          deletedAt: null,
+          branchId: filters.branchId,
+        },
+        select: { id: true },
+      });
+      warehouseIds = warehouses.map((w) => w.id);
+      if (warehouseIds.length === 0) return [];
+    }
+
     return prisma.goodsReceipt.findMany({
-      where: { organizationId },
+      where: {
+        organizationId: filters.organizationId,
+        ...(warehouseIds ? { warehouseId: { in: warehouseIds } } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: {
         purchaseOrder: { select: { orderNumber: true } },
@@ -99,9 +130,10 @@ export class PurchasingQueryService {
     });
   }
 
-  static async listSupplierInvoices(organizationId: string) {
+  static async listSupplierInvoices(filters: PurchasingListFilters) {
+    // Supplier invoices are org-level AP documents (no branch column).
     return prisma.supplierInvoice.findMany({
-      where: { organizationId },
+      where: { organizationId: filters.organizationId },
       orderBy: { invoiceDate: "desc" },
       include: {
         supplier: { select: { id: true, name: true, code: true } },

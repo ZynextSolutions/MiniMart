@@ -118,6 +118,34 @@ export const ALL_PERMISSION_CODES: Permission[] = Object.values(PERMISSIONS).fla
   (group) => Object.values(group),
 ) as Permission[];
 
+/**
+ * Permissions that are organization-scoped (not tied to the active branch).
+ * Operational permissions authorize against session.user.branchId.
+ */
+export const ORG_SCOPED_PERMISSIONS = new Set<string>([
+  PERMISSIONS.USERS.VIEW,
+  PERMISSIONS.USERS.CREATE,
+  PERMISSIONS.USERS.UPDATE,
+  PERMISSIONS.USERS.DELETE,
+  PERMISSIONS.ROLES.VIEW,
+  PERMISSIONS.ROLES.MANAGE,
+  PERMISSIONS.SETTINGS.COMPANY_VIEW,
+  PERMISSIONS.SETTINGS.COMPANY_UPDATE,
+  PERMISSIONS.SETTINGS.BRANCH_MANAGE,
+  PERMISSIONS.SETTINGS.TAX_MANAGE,
+  PERMISSIONS.SETTINGS.RECEIPT_MANAGE,
+  PERMISSIONS.SETTINGS.FISCAL_MANAGE,
+  PERMISSIONS.ACCOUNTING.COA_VIEW,
+  PERMISSIONS.ACCOUNTING.COA_MANAGE,
+  PERMISSIONS.ACCOUNTING.PERIOD_CLOSE,
+  PERMISSIONS.AUDIT.VIEW,
+  PERMISSIONS.NOTIFICATIONS.VIEW,
+]);
+
+export function isOrgScopedPermission(permission: string): boolean {
+  return ORG_SCOPED_PERMISSIONS.has(permission);
+}
+
 export interface PermissionDefinition {
   code: Permission;
   module: string;

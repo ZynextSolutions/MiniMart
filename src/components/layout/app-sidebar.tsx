@@ -13,22 +13,74 @@ import { usePermission } from "@/hooks/use-permission";
 import { useModules } from "@/components/providers/module-provider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, Store } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Store,
+} from "lucide-react";
+
+const SIDEBAR_COLLAPSED_KEY = "sidebar-icon-collapsed";
 
 interface AppSidebarProps {
   organizationName?: string;
   className?: string;
+  /** When false, sidebar stays expanded (e.g. mobile sheet). Default true. */
+  collapsible?: boolean;
 }
 
 type VisibleNavItem = NavItem & { children?: NavItem[] };
 
-export function AppSidebar({ organizationName, className }: AppSidebarProps) {
+export function AppSidebar({
+  organizationName,
+  className,
+  collapsible = true,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const { hasPermission } = usePermission();
   const { isModuleEnabled } = useModules();
+  const [iconCollapsed, setIconCollapsed] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
+
+  useEffect(() => {
+    if (!collapsible) return;
+    try {
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (stored === "true") setIconCollapsed(true);
+    } catch {
+      // ignore
+    }
+  }, [collapsible]);
+
+  function toggleIconCollapsed() {
+    setIconCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
+  const isIconMode = collapsible && iconCollapsed;
 
   const isItemActive = useCallback(
     (href: string, peers: string[] = []) => {
@@ -93,6 +145,8 @@ export function AppSidebar({ organizationName, className }: AppSidebarProps) {
   );
 
   useEffect(() => {
+    if (isIconMode) return;
+
     setCollapsedSections((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -138,10 +192,77 @@ export function AppSidebar({ organizationName, className }: AppSidebarProps) {
 
       return changed ? next : prev;
     });
-  }, [navItemIsActive, visibleMainGroups, visibleSettings]);
+  }, [isIconMode, navItemIsActive, visibleMainGroups, visibleSettings]);
 
   function toggleSection(key: string) {
     setCollapsedSections((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }));
+  }
+
+  function renderIconLink(item: VisibleNavItem) {
+    const Icon = item.icon;
+    const isActive = navItemIsActive(item);
+
+    if (item.children && item.children.length > 0) {
+      return (
+        <Tooltip key={item.href}>
+          <DropdownMenu>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                  )}
+                  aria-label={item.title}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <DropdownMenuContent side="right" align="start" className="min-w-44">
+              {item.children.map((child) => {
+                const childHrefs = item.children!.map((c) => c.href);
+                const childActive = isItemActive(child.href, childHrefs);
+                return (
+                  <DropdownMenuItem key={child.href} asChild>
+                    <Link
+                      href={child.href}
+                      className={cn(childActive && "bg-accent font-medium")}
+                    >
+                      {child.title}
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <TooltipContent side="right">{item.title}</TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return (
+      <Tooltip key={item.href}>
+        <TooltipTrigger asChild>
+          <Link
+            href={item.href}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              isActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+            )}
+            aria-label={item.title}
+          >
+            <Icon className="h-4 w-4" />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">{item.title}</TooltipContent>
+      </Tooltip>
+    );
   }
 
   function renderNavItem(item: VisibleNavItem) {
@@ -222,68 +343,142 @@ export function AppSidebar({ organizationName, className }: AppSidebarProps) {
   }
 
   return (
-    <aside className={cn("flex w-64 flex-col border-r bg-sidebar", className)}>
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Store className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">Mini Mart ERP</p>
-          {organizationName && (
-            <p className="truncate text-xs text-muted-foreground">
-              {organizationName}
-            </p>
+    <TooltipProvider delayDuration={0}>
+      <aside
+        className={cn(
+          "flex flex-col border-r bg-sidebar transition-[width] duration-200",
+          isIconMode ? "w-16" : "w-64",
+          className,
+        )}
+      >
+        <div
+          className={cn(
+            "flex h-14 items-center border-b",
+            isIconMode ? "justify-center px-2" : "gap-2 px-4",
+          )}
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Store className="h-4 w-4" />
+          </div>
+          {!isIconMode && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">Mini Mart ERP</p>
+              {organizationName && (
+                <p className="truncate text-xs text-muted-foreground">
+                  {organizationName}
+                </p>
+              )}
+            </div>
+          )}
+          {collapsible && !isIconMode && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={toggleIconCollapsed}
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
           )}
         </div>
-      </div>
-      <ScrollArea className="flex-1 px-3 py-4">
-        {visibleMainGroups.map((group, groupIndex) => (
-          <div key={group.title}>
-            {groupIndex > 0 && <Separator className="my-4" />}
-            <button
-              type="button"
-              className="mb-2 flex w-full items-center justify-between px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              onClick={() => toggleSection(`group:${group.title}`)}
-            >
-              <span>{group.title}</span>
-              <ChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform",
-                  collapsedSections[`group:${group.title}`] ? "-rotate-90" : "rotate-0",
-                )}
-              />
-            </button>
-            {!collapsedSections[`group:${group.title}`] && (
-              <nav className="space-y-1">
-                {group.items.map((item) => renderNavItem(item))}
-              </nav>
-            )}
-          </div>
-        ))}
-        {visibleSettings.length > 0 && (
-          <>
-            <Separator className="my-4" />
-            <button
-              type="button"
-              className="mb-2 flex w-full items-center justify-between px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              onClick={() => toggleSection("group:Settings")}
-            >
-              <span>Settings</span>
-              <ChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform",
-                  collapsedSections["group:Settings"] ? "-rotate-90" : "rotate-0",
-                )}
-              />
-            </button>
-            {!collapsedSections["group:Settings"] && (
-              <nav className="space-y-1">
-                {visibleSettings.map((item) => renderNavItem(item))}
-              </nav>
-            )}
-          </>
-        )}
-      </ScrollArea>
-    </aside>
+
+        <ScrollArea className={cn("flex-1 py-4", isIconMode ? "px-2" : "px-3")}>
+          {isIconMode ? (
+            <div className="flex flex-col items-center gap-1">
+              {visibleMainGroups.map((group, groupIndex) => (
+                <div key={group.title} className="flex w-full flex-col items-center gap-1">
+                  {groupIndex > 0 && <Separator className="my-2 w-8" />}
+                  {group.items.map((item) => renderIconLink(item))}
+                </div>
+              ))}
+              {visibleSettings.length > 0 && (
+                <>
+                  <Separator className="my-2 w-8" />
+                  {visibleSettings.map((item) => renderIconLink(item))}
+                </>
+              )}
+              <div className="mt-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={toggleIconCollapsed}
+                      aria-label="Expand sidebar"
+                    >
+                      <PanelLeftOpen className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Expand sidebar</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          ) : (
+            <>
+              {visibleMainGroups.map((group, groupIndex) => {
+                const GroupIcon = group.icon;
+                const groupKey = `group:${group.title}`;
+                const isCollapsed = collapsedSections[groupKey];
+
+                return (
+                  <div key={group.title}>
+                    {groupIndex > 0 && <Separator className="my-4" />}
+                    <button
+                      type="button"
+                      className="mb-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                      onClick={() => toggleSection(groupKey)}
+                      aria-expanded={!isCollapsed}
+                    >
+                      <GroupIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="flex-1 text-left">{group.title}</span>
+                      <ChevronDown
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-transform",
+                          isCollapsed ? "-rotate-90" : "rotate-0",
+                        )}
+                      />
+                    </button>
+                    {!isCollapsed && (
+                      <nav className="space-y-1">
+                        {group.items.map((item) => renderNavItem(item))}
+                      </nav>
+                    )}
+                  </div>
+                );
+              })}
+              {visibleSettings.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <button
+                    type="button"
+                    className="mb-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                    onClick={() => toggleSection("group:Settings")}
+                    aria-expanded={!collapsedSections["group:Settings"]}
+                  >
+                    <Settings className="h-3.5 w-3.5 shrink-0" />
+                    <span className="flex-1 text-left">Settings</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 transition-transform",
+                        collapsedSections["group:Settings"] ? "-rotate-90" : "rotate-0",
+                      )}
+                    />
+                  </button>
+                  {!collapsedSections["group:Settings"] && (
+                    <nav className="space-y-1">
+                      {visibleSettings.map((item) => renderNavItem(item))}
+                    </nav>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </ScrollArea>
+      </aside>
+    </TooltipProvider>
   );
 }

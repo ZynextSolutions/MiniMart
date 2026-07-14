@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { PurchasingQueryService } from "@/features/purchasing/services/purchasing-query.service";
 import { OrderDetailClient } from "@/features/purchasing/components/order-detail-client";
@@ -16,7 +16,7 @@ export default async function PurchaseOrderDetailPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.PURCHASING.ORDER_CREATE);
+  await authorizeSession(session, PERMISSIONS.PURCHASING.ORDER_CREATE);
 
   const { id } = await params;
   const order = await PurchasingQueryService.getPurchaseOrderDetail(id, session.user.organizationId);

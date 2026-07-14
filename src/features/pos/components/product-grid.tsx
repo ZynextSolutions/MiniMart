@@ -10,6 +10,7 @@ import type { ProductLookup } from "@/features/pos/stores/pos-cart-store";
 interface ProductGridProps {
   onAddProduct: (product: ProductLookup) => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  warehouseId?: string;
 }
 
 interface ApiProduct {
@@ -22,12 +23,18 @@ interface ApiProduct {
   barcode: string | null;
   variantId: string | null;
   taxRate: string | null;
+  stockQty: number | null;
 }
 
-export function ProductGrid({ onAddProduct, searchInputRef }: ProductGridProps) {
+export function ProductGrid({
+  onAddProduct,
+  searchInputRef,
+  warehouseId,
+}: ProductGridProps) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [loading, setLoading] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
 
   const search = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -36,14 +43,20 @@ export function ProductGrid({ onAddProduct, searchInputRef }: ProductGridProps) 
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/products/search?q=${encodeURIComponent(q)}&limit=24`);
+      const params = new URLSearchParams({
+        q,
+        limit: "24",
+      });
+      if (warehouseId) params.set("warehouseId", warehouseId);
+      if (inStockOnly) params.set("inStockOnly", "1");
+      const res = await fetch(`/api/v1/products/search?${params}`);
       if (res.ok) {
         setProducts(await res.json());
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [warehouseId, inStockOnly]);
 
   useEffect(() => {
     const timer = setTimeout(() => search(query), 250);
@@ -77,6 +90,17 @@ export function ProductGrid({ onAddProduct, searchInputRef }: ProductGridProps) 
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+      {warehouseId && (
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border"
+            checked={inStockOnly}
+            onChange={(e) => setInStockOnly(e.target.checked)}
+          />
+          In stock only
+        </label>
+      )}
 
       <div className="flex-1 overflow-auto">
         {loading ? (
@@ -109,6 +133,15 @@ export function ProductGrid({ onAddProduct, searchInputRef }: ProductGridProps) 
                   {formatMoney(parseFloat(p.sellingPrice))}
                 </span>
                 <span className="text-xs text-muted-foreground">{p.sku}</span>
+                {p.stockQty != null && (
+                  <span
+                    className={`text-xs ${
+                      p.stockQty > 0 ? "text-muted-foreground" : "text-destructive"
+                    }`}
+                  >
+                    Stock: {p.stockQty}
+                  </span>
+                )}
               </button>
             ))}
           </div>

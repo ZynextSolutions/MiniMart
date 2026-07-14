@@ -88,9 +88,12 @@ export function InventoryOverviewClient({
   const [initializing, setInitializing] = useState(false);
 
   function applyFilters() {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(window.location.search);
     if (search) params.set("search", search);
+    else params.delete("search");
     if (warehouseId && warehouseId !== "all") params.set("warehouse", warehouseId);
+    else params.delete("warehouse");
+    params.delete("page");
     router.push(`/inventory?${params.toString()}`);
   }
 

@@ -4,7 +4,10 @@ import { getPrismaBase } from "@/platform/tenant/tenant-prisma";
 import { withOrganizationContext } from "@/platform/tenant/tenant-context";
 import { UnauthorizedError, ValidationError } from "@/lib/errors/app-error";
 import { authorize } from "@/lib/permissions/authorization";
-import type { Permission } from "@/lib/permissions/permissions";
+import {
+  isOrgScopedPermission,
+  type Permission,
+} from "@/lib/permissions/permissions";
 import { SubscriptionGuardService } from "@/platform/subscriptions/subscription-guard.service";
 
 export type AuthSession = Session & {
@@ -76,26 +79,59 @@ export async function requireApiSession(
 
   return withOrganizationContext(session.user.organizationId, async () => {
     if (permission) {
-      await authorize(session.user.id, permission, {
-        branchId: session.user.branchId ?? undefined,
-      });
+      await authorizeSession(session, permission);
     }
     return session;
   });
 }
 
+type AuthorizeSessionOptions = {
+  /** @deprecated Prefer `scope`. `false` maps to organization scope. */
+  requireBranch?: boolean;
+  scope?: "auto" | "branch" | "organization";
+};
+
+/** Minimal session shape accepted by authorizeSession (auth() or requireSession). */
+type AuthorizableSession = {
+  user: {
+    id: string;
+    branchId?: string | null;
+  };
+};
+
+/**
+ * Authorize using the active branch by default.
+ * Org-scoped permissions (users, roles, company settings, etc.)
+ * are checked without a branch filter (union / owner bypass still apply).
+ */
 export async function authorizeSession(
-  session: AuthSession,
+  session: AuthorizableSession,
   permission: Permission | string,
-  options?: { requireBranch?: boolean },
+  options?: AuthorizeSessionOptions,
 ): Promise<void> {
-  const requireBranch = options?.requireBranch ?? true;
-  if (requireBranch && !session.user.branchId) {
+  const scope =
+    options?.scope ??
+    (options?.requireBranch === false
+      ? "organization"
+      : options?.requireBranch === true
+        ? "branch"
+        : "auto");
+
+  const orgScoped =
+    scope === "organization" ||
+    (scope === "auto" && isOrgScopedPermission(permission));
+
+  if (orgScoped) {
+    await authorize(session.user.id, permission);
+    return;
+  }
+
+  if (!session.user.branchId) {
     throw new ValidationError("No branch selected");
   }
 
   await authorize(session.user.id, permission, {
-    branchId: session.user.branchId ?? undefined,
+    branchId: session.user.branchId,
   });
 }
 
@@ -104,7 +140,7 @@ export async function requireBranchSession(
 ): Promise<AuthSession> {
   const session = await requireSession();
   await withOrganizationContext(session.user.organizationId, async () => {
-    await authorizeSession(session, permission);
+    await authorizeSession(session, permission, { scope: "branch" });
   });
   return session;
 }

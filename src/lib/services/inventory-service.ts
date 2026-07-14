@@ -11,8 +11,9 @@ import { generateDocumentNumber } from "@/lib/services/document-number";
 import { NotificationService } from "@/lib/services/notification-service";
 import {
   assertVariantsBelongToOrg,
-  assertWarehouseBelongsToOrg,
+  assertWarehouseAccess,
 } from "@/lib/services/variant-access";
+import { ensureStockLevelsForVariants } from "@/lib/services/stock-level-provisioning";
 import { add, isPositive, sub, toDecimal, ZERO } from "@/lib/utils/decimal";
 import type { CostingMethod, MovementType, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
@@ -39,6 +40,15 @@ import { ADJUSTMENT_REASONS } from "@/features/inventory/constants/adjustment-re
 export { ADJUSTMENT_REASONS };
 
 export class InventoryService {
+  /** Warehouse must belong to org; when branchId is set, also to that branch. */
+  private static async requireWarehouse(
+    organizationId: string,
+    warehouseId: string,
+    branchId?: string | null,
+  ) {
+    return assertWarehouseAccess(organizationId, warehouseId, { branchId });
+  }
+
   private static async getOrCreateStockLevel(
     tx: Tx,
     warehouseId: string,
@@ -283,11 +293,13 @@ export class InventoryService {
       ctx.organizationId,
       input.lines.map((l) => l.variantId),
     );
+    const warehouse = await this.requireWarehouse(
+      ctx.organizationId,
+      input.warehouseId,
+      ctx.branchId,
+    );
 
     return prisma.$transaction(async (tx) => {
-      const warehouse = await tx.warehouse.findFirstOrThrow({
-        where: { id: input.warehouseId, organizationId: ctx.organizationId },
-      });
       const movementNumber = await generateDocumentNumber("STK-IN", ctx.organizationId);
       const movement = await tx.inventoryMovement.create({
         data: {
@@ -343,11 +355,13 @@ export class InventoryService {
       ctx.organizationId,
       input.lines.map((l) => l.variantId),
     );
+    const warehouse = await this.requireWarehouse(
+      ctx.organizationId,
+      input.warehouseId,
+      ctx.branchId,
+    );
 
     return prisma.$transaction(async (tx) => {
-      const warehouse = await tx.warehouse.findFirstOrThrow({
-        where: { id: input.warehouseId, organizationId: ctx.organizationId },
-      });
       const movementNumber = await generateDocumentNumber("STK-OUT", ctx.organizationId);
       const movement = await tx.inventoryMovement.create({
         data: {
@@ -405,6 +419,11 @@ export class InventoryService {
       ctx.organizationId,
       input.lines.map((l) => l.variantId),
     );
+    const warehouse = await this.requireWarehouse(
+      ctx.organizationId,
+      input.warehouseId,
+      ctx.branchId,
+    );
 
     const notes = [input.reasonCode, input.notes].filter(Boolean).join(" — ");
     const inLines = input.lines.filter((l) => l.direction === "IN");
@@ -412,10 +431,6 @@ export class InventoryService {
     const movementNumbers: string[] = [];
 
     return prisma.$transaction(async (tx) => {
-      const warehouse = await tx.warehouse.findFirstOrThrow({
-        where: { id: input.warehouseId, organizationId: ctx.organizationId },
-      });
-
       if (inLines.length > 0) {
         const movementNumber = await generateDocumentNumber("ADJ", ctx.organizationId);
         movementNumbers.push(movementNumber);
@@ -511,17 +526,20 @@ export class InventoryService {
       ctx.organizationId,
       input.lines.map((l) => l.variantId),
     );
+    // Source must be on the active branch; destination may be another branch in-org.
+    const sourceWarehouse = await this.requireWarehouse(
+      ctx.organizationId,
+      input.sourceWarehouseId,
+      ctx.branchId,
+    );
+    const destWarehouse = await this.requireWarehouse(
+      ctx.organizationId,
+      input.destWarehouseId,
+    );
 
     const transferGroupId = randomUUID();
 
     return prisma.$transaction(async (tx) => {
-      const sourceWarehouse = await tx.warehouse.findFirstOrThrow({
-        where: { id: input.sourceWarehouseId, organizationId: ctx.organizationId },
-      });
-      const destWarehouse = await tx.warehouse.findFirstOrThrow({
-        where: { id: input.destWarehouseId, organizationId: ctx.organizationId },
-      });
-
       const outNumber = await generateDocumentNumber("TRF", ctx.organizationId);
       const inNumber = `${outNumber}-IN`;
 
@@ -677,31 +695,24 @@ export class InventoryService {
     });
   }
 
-  static async initializeStockLevels(warehouseId: string, organizationId: string, actorId: string) {
-    const warehouse = await prisma.warehouse.findFirst({
-      where: { id: warehouseId, organizationId, deletedAt: null },
-    });
-    if (!warehouse) throw new NotFoundError("Warehouse");
+  static async initializeStockLevels(
+    warehouseId: string,
+    organizationId: string,
+    actorId: string,
+    branchId?: string | null,
+  ) {
+    await this.requireWarehouse(organizationId, warehouseId, branchId);
 
     const variants = await prisma.productVariant.findMany({
       where: { deletedAt: null, product: { organizationId, deletedAt: null } },
       select: { id: true },
     });
 
-    let created = 0;
-    await prisma.$transaction(async (tx) => {
-      for (const variant of variants) {
-        const exists = await tx.stockLevel.findUnique({
-          where: { warehouseId_variantId: { warehouseId, variantId: variant.id } },
-        });
-        if (!exists) {
-          await tx.stockLevel.create({
-            data: { warehouseId, variantId: variant.id, quantity: ZERO, avgCost: ZERO },
-          });
-          created++;
-        }
-      }
-    });
+    const created = await ensureStockLevelsForVariants(
+      organizationId,
+      variants.map((v) => v.id),
+      { warehouseIds: [warehouseId] },
+    );
 
     await AuditService.log({
       organizationId,
@@ -719,7 +730,7 @@ export class InventoryService {
     input: { warehouseId: string; countDate: Date; notes?: string },
     ctx: ServiceContext,
   ) {
-    await assertWarehouseBelongsToOrg(ctx.organizationId, input.warehouseId);
+    await this.requireWarehouse(ctx.organizationId, input.warehouseId, ctx.branchId);
 
     const countNumber = await generateDocumentNumber("CNT", ctx.organizationId);
 

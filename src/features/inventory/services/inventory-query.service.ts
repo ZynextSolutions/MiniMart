@@ -1,4 +1,6 @@
 import { prisma } from "@/infrastructure/database/prisma";
+import type { BranchFilter } from "@/lib/auth/branch-access";
+import { NotFoundError } from "@/lib/errors/app-error";
 import type { MovementType, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { mul, toDecimal } from "@/lib/utils/decimal";
@@ -66,16 +68,29 @@ export interface MovementRow {
 export class InventoryQueryService {
   static async listStockLevels(params: {
     organizationId: string;
+    branchId?: BranchFilter;
     warehouseId?: string;
     search?: string;
     lowStockOnly?: boolean;
     page?: number;
     pageSize?: number;
   }) {
-    const { organizationId, warehouseId, search, lowStockOnly, page = 1, pageSize = 20 } = params;
+    const {
+      organizationId,
+      branchId,
+      warehouseId,
+      search,
+      lowStockOnly,
+      page = 1,
+      pageSize = 20,
+    } = params;
 
     const where: Prisma.StockLevelWhereInput = {
-      warehouse: { organizationId, deletedAt: null },
+      warehouse: {
+        organizationId,
+        deletedAt: null,
+        ...(branchId ? { branchId } : {}),
+      },
       ...(warehouseId ? { warehouseId } : {}),
       ...(search
         ? {
@@ -136,10 +151,18 @@ export class InventoryQueryService {
     };
   }
 
-  static async getValuation(organizationId: string, warehouseId?: string): Promise<ValuationRow[]> {
+  static async getValuation(
+    organizationId: string,
+    warehouseId?: string,
+    branchId?: BranchFilter,
+  ): Promise<ValuationRow[]> {
     const levels = await prisma.stockLevel.findMany({
       where: {
-        warehouse: { organizationId, deletedAt: null },
+        warehouse: {
+          organizationId,
+          deletedAt: null,
+          ...(branchId ? { branchId } : {}),
+        },
         ...(warehouseId ? { warehouseId } : {}),
         quantity: { gt: 0 },
       },
@@ -169,6 +192,7 @@ export class InventoryQueryService {
 
   static async getLedger(params: {
     organizationId: string;
+    branchId?: BranchFilter;
     warehouseId?: string;
     variantId?: string;
     from?: Date;
@@ -176,19 +200,35 @@ export class InventoryQueryService {
     page?: number;
     pageSize?: number;
   }) {
-    const { organizationId, warehouseId, variantId, from, to, page = 1, pageSize = 50 } = params;
+    const {
+      organizationId,
+      branchId,
+      warehouseId,
+      variantId,
+      from,
+      to,
+      page = 1,
+      pageSize = 50,
+    } = params;
 
-    let warehouseIds: string[] | undefined;
-    if (!warehouseId) {
-      const warehouses = await prisma.warehouse.findMany({
-        where: { organizationId, deletedAt: null },
-        select: { id: true },
-      });
-      warehouseIds = warehouses.map((w) => w.id);
+    const warehouses = await prisma.warehouse.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        ...(branchId ? { branchId } : {}),
+        ...(warehouseId ? { id: warehouseId } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (warehouseId && warehouses.length === 0) {
+      throw new NotFoundError("Warehouse");
     }
 
+    const warehouseIds = warehouses.map((w) => w.id);
+
     const where: Prisma.InventoryLedgerWhereInput = {
-      ...(warehouseId ? { warehouseId } : { warehouseId: { in: warehouseIds } }),
+      warehouseId: { in: warehouseIds },
       ...(variantId ? { variantId } : {}),
       ...(from || to
         ? {
@@ -248,16 +288,34 @@ export class InventoryQueryService {
 
   static async listMovements(params: {
     organizationId: string;
+    branchId?: BranchFilter;
     movementType?: MovementType | MovementType[];
     warehouseId?: string;
     page?: number;
     pageSize?: number;
   }) {
-    const { organizationId, movementType, warehouseId, page = 1, pageSize = 20 } = params;
+    const {
+      organizationId,
+      branchId,
+      movementType,
+      warehouseId,
+      page = 1,
+      pageSize = 20,
+    } = params;
 
     const where: Prisma.InventoryMovementWhereInput = {
       organizationId,
-      ...(warehouseId ? { warehouseId } : {}),
+      ...(branchId ? { branchId } : {}),
+      ...(warehouseId
+        ? {
+            warehouseId,
+            warehouse: {
+              organizationId,
+              deletedAt: null,
+              ...(branchId ? { branchId } : {}),
+            },
+          }
+        : {}),
       ...(movementType
         ? Array.isArray(movementType)
           ? { movementType: { in: movementType } }
@@ -384,9 +442,18 @@ export class InventoryQueryService {
     });
   }
 
-  static async getSummary(organizationId: string) {
+  static async getSummary(
+    organizationId: string,
+    branchId?: BranchFilter,
+  ) {
     const levels = await prisma.stockLevel.findMany({
-      where: { warehouse: { organizationId, deletedAt: null } },
+      where: {
+        warehouse: {
+          organizationId,
+          deletedAt: null,
+          ...(branchId ? { branchId } : {}),
+        },
+      },
       include: {
         variant: { select: { product: { select: { reorderLevel: true } } } },
       },

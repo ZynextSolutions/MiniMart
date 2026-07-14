@@ -36,13 +36,28 @@ export async function assertSupplierBelongsToOrg(
   if (!supplier) throw new NotFoundError("Supplier");
 }
 
+export async function assertWarehouseAccess(
+  organizationId: string,
+  warehouseId: string,
+  options?: { branchId?: string | null },
+): Promise<{ id: string; branchId: string; name: string }> {
+  const warehouse = await prisma.warehouse.findFirst({
+    where: {
+      id: warehouseId,
+      organizationId,
+      deletedAt: null,
+      ...(options?.branchId ? { branchId: options.branchId } : {}),
+    },
+    select: { id: true, branchId: true, name: true },
+  });
+  if (!warehouse) throw new NotFoundError("Warehouse");
+  return warehouse;
+}
+
+/** @deprecated Prefer assertWarehouseAccess with optional branchId */
 export async function assertWarehouseBelongsToOrg(
   organizationId: string,
   warehouseId: string,
 ): Promise<void> {
-  const warehouse = await prisma.warehouse.findFirst({
-    where: { id: warehouseId, organizationId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!warehouse) throw new NotFoundError("Warehouse");
+  await assertWarehouseAccess(organizationId, warehouseId);
 }

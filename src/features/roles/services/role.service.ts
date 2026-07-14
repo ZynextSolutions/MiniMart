@@ -1,7 +1,16 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
-import { assertSystemRolePermissionsEditable } from "@/lib/permissions/role-guards";
+import { assertSystemRoleRenameAllowed } from "@/lib/permissions/role-guards";
+import {
+  ROLE_DESCRIPTIONS,
+  ROLE_PERMISSION_MAP,
+  SYSTEM_ROLES,
+  type SystemRoleName,
+} from "@/lib/permissions/roles";
 import { AuditService } from "@/lib/services/audit-service";
+import type { Prisma } from "@prisma/client";
+
+type Tx = Prisma.TransactionClient;
 
 export class RoleService {
   static async list(organizationId: string) {
@@ -26,6 +35,58 @@ export class RoleService {
     });
     if (!role) throw new NotFoundError("Role");
     return role;
+  }
+
+  /**
+   * Upsert system roles and replace their permissions from ROLE_PERMISSION_MAP.
+   * Used by seed / provisioning / explicit “reset to defaults”.
+   */
+  static async syncSystemRolePermissions(
+    organizationId: string,
+    options?: { tx?: Tx; actorId?: string },
+  ) {
+    const db = options?.tx ?? prisma;
+    const allPermissions = await db.permission.findMany({
+      select: { id: true, code: true },
+    });
+    const permissionMap = new Map(allPermissions.map((p) => [p.code, p.id]));
+
+    for (const roleName of Object.values(SYSTEM_ROLES)) {
+      const description = ROLE_DESCRIPTIONS[roleName];
+      const role = await db.role.upsert({
+        where: {
+          organizationId_name: { organizationId, name: roleName },
+        },
+        update: { description, isSystem: true, deletedAt: null },
+        create: {
+          organizationId,
+          name: roleName,
+          description,
+          isSystem: true,
+        },
+      });
+
+      await db.rolePermission.deleteMany({ where: { roleId: role.id } });
+
+      const codes = ROLE_PERMISSION_MAP[roleName as SystemRoleName];
+      for (const code of codes) {
+        const permissionId = permissionMap.get(code);
+        if (!permissionId) continue;
+        await db.rolePermission.create({
+          data: { roleId: role.id, permissionId },
+        });
+      }
+    }
+
+    if (options?.actorId && !options.tx) {
+      await AuditService.log({
+        organizationId,
+        userId: options.actorId,
+        action: "roles.system_synced",
+        entityType: "Role",
+        after: { roles: Object.values(SYSTEM_ROLES) },
+      });
+    }
   }
 
   static async create(
@@ -88,16 +149,17 @@ export class RoleService {
     actorId: string,
   ) {
     const role = await this.getById(id, organizationId);
-    if (role.isSystem && data.name && data.name !== role.name) {
-      throw new ConflictError("Cannot rename system roles");
-    }
-    assertSystemRolePermissionsEditable(role.isSystem, data.permissionIds);
+    assertSystemRoleRenameAllowed(role.isSystem, role.name, data.name);
+
+    const beforePermissionIds = role.rolePermissions.map(
+      (rp) => rp.permissionId,
+    );
 
     await prisma.$transaction(async (tx) => {
       await tx.role.update({
         where: { id },
         data: {
-          name: data.name,
+          ...(role.isSystem ? {} : data.name != null ? { name: data.name } : {}),
           description: data.description,
         },
       });
@@ -118,7 +180,16 @@ export class RoleService {
       action: "role.updated",
       entityType: "Role",
       entityId: id,
-      after: { name: data.name ?? role.name },
+      before: {
+        name: role.name,
+        description: role.description,
+        permissionIds: beforePermissionIds,
+      },
+      after: {
+        name: role.isSystem ? role.name : (data.name ?? role.name),
+        description: data.description ?? role.description,
+        permissionIds: data.permissionIds ?? beforePermissionIds,
+      },
     });
 
     return this.getById(id, organizationId);

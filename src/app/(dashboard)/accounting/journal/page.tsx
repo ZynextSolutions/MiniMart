@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/auth";
+import { authorizeSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/permissions/authorization";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { AccountingQueryService } from "@/features/accounting/services/accounting-query.service";
 import { JournalPageClient } from "@/features/accounting/components/journal-page-client";
@@ -9,7 +9,7 @@ export default async function JournalPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  await authorize(session.user.id, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
 
   const [entries, accounts] = await Promise.all([
     AccountingQueryService.listJournalEntries(session.user.organizationId),

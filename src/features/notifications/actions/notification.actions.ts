@@ -1,14 +1,13 @@
 "use server";
 
-import { requireSession } from "@/lib/auth/session";
-import { authorize } from "@/lib/permissions/authorization";
+import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { NotificationService } from "@/lib/services/notification-service";
 import { revalidatePath } from "next/cache";
 
 export async function getNotificationsAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.NOTIFICATIONS.VIEW);
+  await authorizeSession(session, PERMISSIONS.NOTIFICATIONS.VIEW);
 
   const [notifications, unreadCount] = await Promise.all([
     NotificationService.listForUser(session.user.id),
@@ -36,7 +35,7 @@ export async function getUnreadNotificationCountAction() {
 
 export async function markNotificationReadAction(notificationId: string) {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.NOTIFICATIONS.VIEW);
+  await authorizeSession(session, PERMISSIONS.NOTIFICATIONS.VIEW);
   await NotificationService.markAsRead(session.user.id, notificationId);
   revalidatePath("/notifications");
   return { success: true };
@@ -44,7 +43,7 @@ export async function markNotificationReadAction(notificationId: string) {
 
 export async function markAllNotificationsReadAction() {
   const session = await requireSession();
-  await authorize(session.user.id, PERMISSIONS.NOTIFICATIONS.VIEW);
+  await authorizeSession(session, PERMISSIONS.NOTIFICATIONS.VIEW);
   await NotificationService.markAllAsRead(session.user.id);
   revalidatePath("/notifications");
   return { success: true };
