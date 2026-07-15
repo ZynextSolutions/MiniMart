@@ -17,23 +17,23 @@ interface OrderDetailClientProps {
   order: {
     id: string;
     orderNumber: string;
-    orderDate: Date;
-    expectedDate: Date | null;
+    orderDate: string;
+    expectedDate: string | null;
     status: string;
     notes: string | null;
-    totalAmount: { toString(): string };
+    totalAmount: number;
     supplier: { name: string; code: string; email: string | null };
     lines: {
       id: string;
-      quantity: { toString(): string };
-      receivedQty: { toString(): string };
-      unitCost: { toString(): string };
+      quantity: number;
+      receivedQty: number;
+      unitCost: number;
       variant?: { sku: string; product: { name: string } };
     }[];
     goodsReceipts: {
       id: string;
       receiptNumber: string;
-      receiptDate: Date;
+      receiptDate: string;
       status: string;
       _count: { lines: number };
     }[];

@@ -8,6 +8,7 @@ import {
   PLATFORM_MODULES,
 } from "@/platform/modules/platform-modules";
 import type { PlanLimits } from "@/platform/subscriptions/plan-limits.types";
+import { ForbiddenError } from "@/lib/errors/app-error";
 
 export type ModuleOverrideState = "inherit" | "enabled" | "disabled";
 
@@ -75,6 +76,19 @@ export class ModuleAccessService {
   ): Promise<boolean> {
     const modules = await this.getEnabledModules(organizationId);
     return modules[moduleKey];
+  }
+
+  static async assertModuleEnabled(
+    organizationId: string,
+    moduleKey: PlatformModuleKey,
+  ): Promise<void> {
+    const enabled = await this.isModuleEnabled(organizationId, moduleKey);
+    if (!enabled) {
+      const mod = PLATFORM_MODULES.find((m) => m.key === moduleKey);
+      throw new ForbiddenError(
+        mod ? `${mod.label} is not enabled on your subscription plan` : "Module not enabled",
+      );
+    }
   }
 
   static async getOrgModuleRows(organizationId: string): Promise<OrgModuleRow[]> {

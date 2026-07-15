@@ -810,6 +810,7 @@ model Warehouse {
   stockLevels        StockLevel[]
   inventoryMovements InventoryMovement[]
   stockCounts        StockCount[]
+  productBatches     ProductBatch[]
 
   @@unique([organizationId, code])
   @@index([branchId])
@@ -832,6 +833,7 @@ model Shelf {
 model ProductBatch {
   id           String    @id @default(uuid()) @db.Uuid
   variantId    String    @map("variant_id") @db.Uuid
+  warehouseId  String    @map("warehouse_id") @db.Uuid
   batchNumber  String    @map("batch_number")
   expiryDate   DateTime? @map("expiry_date") @db.Date
   costPrice    Decimal   @map("cost_price") @db.Decimal(19, 4)
@@ -840,9 +842,10 @@ model ProductBatch {
   receivedAt   DateTime  @map("received_at")
   createdAt    DateTime  @default(now()) @map("created_at")
 
-  variant ProductVariant @relation(fields: [variantId], references: [id])
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
 
-  @@index([variantId, expiryDate])
+  @@index([variantId, warehouseId, expiryDate])
   @@map("product_batches")
 }
 

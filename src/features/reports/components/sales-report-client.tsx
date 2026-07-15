@@ -47,7 +47,7 @@ interface SalesReportClientProps {
     };
   };
   byProduct?: {
-    rows: { sku: string; productName: string; quantity: number; revenue: number }[];
+    rows: { sku: string; productName: string; quantity: number; remainingQty: number; revenue: number }[];
   };
   byCategory?: {
     rows: { categoryName: string; quantity: number; revenue: number }[];
@@ -218,13 +218,15 @@ export function SalesReportClient(props: SalesReportClientProps) {
           columns={[
             { header: "SKU", key: "sku" },
             { header: "Product", key: "productName" },
-            { header: "Qty", key: "quantity", align: "right" },
+            { header: "Qty Sold", key: "quantity", align: "right" },
+            { header: "Remaining Qty", key: "remainingQty", align: "right" },
             { header: "Revenue", key: "revenue", align: "right" },
           ]}
           rows={props.byProduct.rows.map((r) => ({
             sku: r.sku,
             productName: r.productName,
             quantity: r.quantity,
+            remainingQty: r.remainingQty,
             revenue: formatMoney(r.revenue),
           }))}
         />

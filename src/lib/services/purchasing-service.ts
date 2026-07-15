@@ -572,6 +572,15 @@ export class PurchasingService {
         tx,
       );
 
+      await AccountingEngine.postSupplierReturn(tx, {
+        organizationId: ctx.organizationId,
+        branchId: warehouse.branchId,
+        userId: ctx.userId,
+        returnId,
+        returnDate: input.returnDate,
+        totalValue,
+      });
+
       await AuditService.log({
         organizationId: ctx.organizationId,
         userId: ctx.userId,

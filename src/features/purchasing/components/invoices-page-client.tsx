@@ -40,11 +40,11 @@ import {
 interface InvoiceRow {
   id: string;
   invoiceNumber: string;
-  invoiceDate: Date;
-  dueDate: Date;
+  invoiceDate: string;
+  dueDate: string;
   status: string;
-  totalAmount: { toString(): string };
-  paidAmount: { toString(): string };
+  totalAmount: number;
+  paidAmount: number;
   supplier: { id: string; name: string };
 }
 
@@ -139,14 +139,14 @@ export function InvoicesPageClient({ invoices, suppliers }: InvoicesPageClientPr
           </TableHeader>
           <TableBody>
             {invoices.map((inv) => {
-              const outstanding = Number(inv.totalAmount) - Number(inv.paidAmount);
+              const outstanding = inv.totalAmount - inv.paidAmount;
               return (
                 <TableRow key={inv.id}>
                   <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
                   <TableCell>{inv.supplier.name}</TableCell>
                   <TableCell>{new Date(inv.dueDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{formatMoney(Number(inv.totalAmount))}</TableCell>
-                  <TableCell>{formatMoney(Number(inv.paidAmount))}</TableCell>
+                  <TableCell>{formatMoney(inv.totalAmount)}</TableCell>
+                  <TableCell>{formatMoney(inv.paidAmount)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{inv.status}</Badge>
                   </TableCell>

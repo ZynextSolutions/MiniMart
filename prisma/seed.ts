@@ -9,8 +9,12 @@ import {
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { PERMISSION_DEFINITIONS } from "../src/lib/permissions/permissions";
-import { SYSTEM_ROLES } from "../src/lib/permissions/roles";
-import { RoleService } from "../src/features/roles/services/role.service";
+import {
+  ROLE_DESCRIPTIONS,
+  ROLE_PERMISSION_MAP,
+  SYSTEM_ROLES,
+  type SystemRoleName,
+} from "../src/lib/permissions/roles";
 import {
   modulesForPlanSlug,
   PLATFORM_MODULES,
@@ -94,6 +98,43 @@ function numberFromCode(code: string, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+async function syncSystemRolePermissions(organizationId: string) {
+  const allPermissions = await prisma.permission.findMany({
+    select: { id: true, code: true },
+  });
+  const permissionMap = new Map(allPermissions.map((p) => [p.code, p.id]));
+
+  for (const roleName of Object.values(SYSTEM_ROLES)) {
+    const typedRoleName = roleName as SystemRoleName;
+    const role = await prisma.role.upsert({
+      where: {
+        organizationId_name: { organizationId, name: roleName },
+      },
+      update: {
+        description: ROLE_DESCRIPTIONS[typedRoleName],
+        isSystem: true,
+        deletedAt: null,
+      },
+      create: {
+        organizationId,
+        name: roleName,
+        description: ROLE_DESCRIPTIONS[typedRoleName],
+        isSystem: true,
+      },
+    });
+
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+
+    for (const code of ROLE_PERMISSION_MAP[typedRoleName]) {
+      const permissionId = permissionMap.get(code);
+      if (!permissionId) continue;
+      await prisma.rolePermission.create({
+        data: { roleId: role.id, permissionId },
+      });
+    }
+  }
+}
+
 async function seedSecurityAndAuth() {
   const org = await prisma.organization.upsert({
     where: { id: ORG_ID },
@@ -162,7 +203,7 @@ async function seedSecurityAndAuth() {
     });
   }
 
-  await RoleService.syncSystemRolePermissions(org.id);
+  await syncSystemRolePermissions(org.id);
 
   const roles: Record<string, string> = {};
   for (const roleName of Object.values(SYSTEM_ROLES)) {
@@ -738,6 +779,7 @@ async function seedCatalogAndInventory(orgId: string, warehouseId: string, taxRa
     await prisma.productBatch.create({
       data: {
         variantId: variant.id,
+        warehouseId,
         batchNumber: `BATCH-${variant.sku.slice(-4)}-${idx + 1}`,
         costPrice: variant.costPrice,
         quantity: 100,

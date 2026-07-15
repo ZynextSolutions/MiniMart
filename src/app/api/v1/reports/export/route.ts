@@ -99,13 +99,15 @@ async function buildExportData(
         columns: [
           { header: "SKU", key: "sku", width: 72 },
           { header: "Product", key: "productName", width: 160 },
-          { header: "Qty", key: "quantity", align: "right", width: 48 },
+          { header: "Qty Sold", key: "quantity", align: "right", width: 48 },
+          { header: "Remaining Qty", key: "remainingQty", align: "right", width: 64 },
           { header: "Revenue", key: "revenue", align: "right", width: 88 },
         ],
         rows: report.rows.map((r) => ({
           sku: r.sku,
           productName: r.productName,
           quantity: r.quantity,
+          remainingQty: r.remainingQty,
           revenue: money(r.revenue),
         })),
       };

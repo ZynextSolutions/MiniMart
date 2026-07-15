@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession, authorizeSession } from "@/lib/auth/session";
+import { requireSession, requireModuleSession, authorizeSession } from "@/lib/auth/session";
 import { resolveSessionBranchFilter } from "@/lib/auth/branch-access";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { getErrorMessage } from "@/lib/errors/app-error";
@@ -19,6 +19,12 @@ function ctx(session: Awaited<ReturnType<typeof requireSession>>) {
   };
 }
 
+async function requireAccountingSession(permission: string) {
+  const session = await requireModuleSession("accounting");
+  await authorizeSession(session, permission);
+  return session;
+}
+
 const journalLineSchema = z.object({
   accountId: z.string().uuid(),
   debit: z.number().nonnegative(),
@@ -29,8 +35,7 @@ const journalLineSchema = z.object({
 // ─── Chart of Accounts ─────────────────────────────────────
 
 export async function listAccountsAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.COA_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.COA_VIEW);
   const accounts = await AccountingQueryService.listAccounts(session.user.organizationId);
   return {
     accounts,
@@ -39,8 +44,7 @@ export async function listAccountsAction() {
 }
 
 export async function listPostableAccountsAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.listPostableAccounts(session.user.organizationId);
 }
 
@@ -53,8 +57,7 @@ export async function createAccountAction(input: {
   description?: string;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.COA_MANAGE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.COA_MANAGE);
     const account = await AccountingService.createAccount(
       { ...input, organizationId: session.user.organizationId },
       session.user.id,
@@ -74,8 +77,7 @@ export async function updateAccountAction(input: {
   parentId?: string | null;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.COA_MANAGE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.COA_MANAGE);
     const { id, ...data } = input;
     const account = await AccountingService.updateAccount(
       id,
@@ -92,8 +94,7 @@ export async function updateAccountAction(input: {
 
 export async function deleteAccountAction(id: string) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.COA_MANAGE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.COA_MANAGE);
     await AccountingService.deleteAccount(id, session.user.organizationId, session.user.id);
     revalidatePath("/accounting/chart-of-accounts");
     return { success: true };
@@ -110,8 +111,7 @@ export async function listJournalEntriesAction(filters?: {
   to?: string;
   search?: string;
 }) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.listJournalEntries(session.user.organizationId, {
     status: filters?.status,
     from: filters?.from ? new Date(filters.from) : undefined,
@@ -127,8 +127,7 @@ export async function createManualJournalAction(input: {
   autoApprove?: boolean;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_CREATE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_CREATE);
     const lines = z.array(journalLineSchema).min(2).parse(input.lines);
     const entry = await AccountingService.createManualJournal(
       {
@@ -148,8 +147,7 @@ export async function createManualJournalAction(input: {
 
 export async function approveJournalAction(id: string) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_CREATE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_CREATE);
     const entry = await AccountingService.approveJournal(id, ctx(session));
     revalidatePath("/accounting/journal");
     return { success: true, entry };
@@ -160,8 +158,7 @@ export async function approveJournalAction(id: string) {
 
 export async function voidJournalAction(id: string, reason: string) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VOID);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VOID);
     await AccountingService.voidJournal(id, reason, ctx(session));
     revalidatePath("/accounting/journal");
     return { success: true };
@@ -173,8 +170,7 @@ export async function voidJournalAction(id: string, reason: string) {
 // ─── Reports ───────────────────────────────────────────────
 
 export async function getTrialBalanceAction(asOf: string, branchId?: string) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getTrialBalance(
     session.user.organizationId,
     new Date(asOf),
@@ -183,8 +179,7 @@ export async function getTrialBalanceAction(asOf: string, branchId?: string) {
 }
 
 export async function getGeneralLedgerAction(accountId: string, from: string, to: string) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getGeneralLedger(
     session.user.organizationId,
     accountId,
@@ -194,8 +189,7 @@ export async function getGeneralLedgerAction(accountId: string, from: string, to
 }
 
 export async function getBalanceSheetAction(asOf: string, branchId?: string) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getBalanceSheet(
     session.user.organizationId,
     new Date(asOf),
@@ -208,8 +202,7 @@ export async function getProfitAndLossAction(
   to: string,
   branchId?: string,
 ) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getProfitAndLoss(
     session.user.organizationId,
     new Date(from),
@@ -223,8 +216,7 @@ export async function getCashFlowAction(
   to: string,
   branchId?: string,
 ) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getCashFlow(
     session.user.organizationId,
     new Date(from),
@@ -234,8 +226,7 @@ export async function getCashFlowAction(
 }
 
 export async function getReceivablesAgingAction(asOf: string) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getReceivablesAging(
     session.user.organizationId,
     new Date(asOf),
@@ -243,8 +234,7 @@ export async function getReceivablesAgingAction(asOf: string) {
 }
 
 export async function getPayablesAgingAction(asOf: string) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.JOURNAL_VIEW);
   return AccountingQueryService.getPayablesAging(
     session.user.organizationId,
     new Date(asOf),
@@ -254,8 +244,7 @@ export async function getPayablesAgingAction(asOf: string) {
 // ─── Expenses / Income ─────────────────────────────────────
 
 export async function listExpensesAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
   return AccountingQueryService.listExpenses(session.user.organizationId);
 }
 
@@ -267,8 +256,7 @@ export async function createExpenseAction(input: {
   paymentMethod: PaymentMethod;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
     const expense = await AccountingService.createExpense(
       { ...input, expenseDate: new Date(input.expenseDate) },
       ctx(session),
@@ -281,8 +269,7 @@ export async function createExpenseAction(input: {
 }
 
 export async function listIncomesAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.INCOME_CREATE);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.INCOME_CREATE);
   return AccountingQueryService.listIncomes(session.user.organizationId);
 }
 
@@ -293,8 +280,7 @@ export async function createIncomeAction(input: {
   description: string;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.INCOME_CREATE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.INCOME_CREATE);
     const income = await AccountingService.createIncome(
       { ...input, incomeDate: new Date(input.incomeDate) },
       ctx(session),
@@ -309,8 +295,7 @@ export async function createIncomeAction(input: {
 // ─── Bank ──────────────────────────────────────────────────
 
 export async function listBankAccountsAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.BANK_MANAGE);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.BANK_MANAGE);
   return AccountingQueryService.listBankAccounts(session.user.organizationId);
 }
 
@@ -322,8 +307,7 @@ export async function createBankAccountAction(input: {
   currency?: string;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.BANK_MANAGE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.BANK_MANAGE);
     const bankAccount = await AccountingService.createBankAccount(
       { ...input, organizationId: session.user.organizationId },
       session.user.id,
@@ -336,8 +320,7 @@ export async function createBankAccountAction(input: {
 }
 
 export async function listBankTransactionsAction(bankAccountId: string) {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.BANK_MANAGE);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.BANK_MANAGE);
   return AccountingQueryService.listBankTransactions(
     session.user.organizationId,
     bankAccountId,
@@ -352,8 +335,7 @@ export async function createBankTransactionAction(input: {
   credit: number;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.BANK_MANAGE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.BANK_MANAGE);
     const transaction = await AccountingService.createBankTransaction(
       { ...input, transactionDate: new Date(input.transactionDate) },
       ctx(session),
@@ -367,8 +349,7 @@ export async function createBankTransactionAction(input: {
 
 export async function reconcileBankTransactionAction(id: string) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.BANK_RECONCILE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.BANK_RECONCILE);
     await AccountingService.reconcileBankTransaction(id, ctx(session));
     revalidatePath("/accounting/bank");
     return { success: true };
@@ -380,8 +361,7 @@ export async function reconcileBankTransactionAction(id: string) {
 // ─── Fiscal Year ───────────────────────────────────────────
 
 export async function listFiscalYearsAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
   return AccountingQueryService.listFiscalYears(session.user.organizationId);
 }
 
@@ -391,8 +371,7 @@ export async function createFiscalYearAction(input: {
   endDate: string;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
     const years = await AccountingService.createFiscalYear(
       {
         organizationId: session.user.organizationId,
@@ -411,8 +390,7 @@ export async function createFiscalYearAction(input: {
 
 export async function closePeriodAction(periodId: string) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
     await AccountingService.closePeriod(periodId, session.user.organizationId, session.user.id);
     revalidatePath("/accounting/fiscal-year");
     return { success: true };
@@ -423,8 +401,7 @@ export async function closePeriodAction(periodId: string) {
 
 export async function closeFiscalYearAction(fiscalYearId: string) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.PERIOD_CLOSE);
     await AccountingService.closeFiscalYear(fiscalYearId, session.user.organizationId, session.user.id);
     revalidatePath("/accounting/fiscal-year");
     return { success: true };
@@ -436,8 +413,7 @@ export async function closeFiscalYearAction(fiscalYearId: string) {
 // ─── Petty Cash ────────────────────────────────────────────
 
 export async function getPettyCashAction() {
-  const session = await requireSession();
-  await authorizeSession(session, PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
+  const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
   const [balance, transactions] = await Promise.all([
     AccountingQueryService.getPettyCashBalance(session.user.organizationId),
     AccountingQueryService.getPettyCashTransactions(session.user.organizationId),
@@ -452,8 +428,7 @@ export async function recordPettyCashExpenseAction(input: {
   expenseAccountId: string;
 }) {
   try {
-    const session = await requireSession();
-    await authorizeSession(session, PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
+    const session = await requireAccountingSession(PERMISSIONS.ACCOUNTING.EXPENSE_CREATE);
     const expense = await AccountingService.recordPettyCashExpense(
       {
         expenseDate: new Date(input.expenseDate),

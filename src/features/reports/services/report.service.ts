@@ -200,19 +200,45 @@ export class ReportService {
   }
 
   static async getSalesByProduct(filters: ReportFilters) {
-    const lines = await prisma.saleLine.findMany({
-      where: {
-        sale: saleWhere(filters),
-      },
-      select: {
-        variantId: true,
-        productName: true,
-        sku: true,
-        quantity: true,
-        lineTotal: true,
-        costPrice: true,
-      },
-    });
+    const [lines, cogsLines] = await Promise.all([
+      prisma.saleLine.findMany({
+        where: {
+          sale: saleWhere(filters),
+        },
+        select: {
+          variantId: true,
+          productName: true,
+          sku: true,
+          quantity: true,
+          lineTotal: true,
+        },
+      }),
+      prisma.inventoryMovementLine.findMany({
+        where: {
+          movement: {
+            organizationId: filters.organizationId,
+            status: "COMPLETED",
+            movementType: { in: ["SALE", "RETURN_IN"] },
+            movementDate: { gte: filters.from, lte: filters.to },
+            ...branchWhere(filters.branchId),
+          },
+        },
+        select: {
+          variantId: true,
+          totalCost: true,
+          movement: { select: { movementType: true } },
+        },
+      }),
+    ]);
+
+    const cogsByVariant = new Map<string, number>();
+    for (const line of cogsLines) {
+      const sign = line.movement.movementType === "RETURN_IN" ? -1 : 1;
+      cogsByVariant.set(
+        line.variantId,
+        (cogsByVariant.get(line.variantId) ?? 0) + sign * toNum(line.totalCost),
+      );
+    }
 
     const byVariant = new Map<
       string,
@@ -230,13 +256,44 @@ export class ReportService {
       };
       row.quantity += toNum(l.quantity);
       row.revenue += toNum(l.lineTotal);
-      row.cogs += toNum(l.costPrice) * toNum(l.quantity);
       byVariant.set(l.variantId, row);
+    }
+
+    for (const [variantId, row] of byVariant) {
+      row.cogs = Math.max(0, cogsByVariant.get(variantId) ?? 0);
+    }
+
+    const variantIds = Array.from(byVariant.keys());
+    const stockByVariant = new Map<string, number>();
+
+    if (variantIds.length > 0) {
+      const stockLevels = await prisma.stockLevel.findMany({
+        where: {
+          variantId: { in: variantIds },
+          warehouse: {
+            organizationId: filters.organizationId,
+            deletedAt: null,
+            ...branchWhere(filters.branchId),
+          },
+        },
+        select: {
+          variantId: true,
+          quantity: true,
+        },
+      });
+
+      for (const level of stockLevels) {
+        stockByVariant.set(
+          level.variantId,
+          (stockByVariant.get(level.variantId) ?? 0) + toNum(level.quantity),
+        );
+      }
     }
 
     const rows = Array.from(byVariant.values())
       .map((r) => ({
         ...r,
+        remainingQty: stockByVariant.get(r.variantId) ?? 0,
         margin: r.revenue - r.cogs,
         marginPct: r.revenue > 0 ? ((r.revenue - r.cogs) / r.revenue) * 100 : 0,
       }))
@@ -545,12 +602,23 @@ export class ReportService {
       bySupplier.set(o.supplierId, row);
     }
 
+    const branchWarehouseIds = filters.branchId
+      ? (
+          await prisma.warehouse.findMany({
+            where: {
+              organizationId: filters.organizationId,
+              ...branchWhere(filters.branchId),
+              deletedAt: null,
+            },
+            select: { id: true },
+          })
+        ).map((w) => w.id)
+      : undefined;
+
     const receipts = await prisma.goodsReceipt.findMany({
       where: {
         organizationId: filters.organizationId,
-        ...(filters.branchId
-          ? { warehouse: { ...branchWhere(filters.branchId) } }
-          : {}),
+        ...(branchWarehouseIds ? { warehouseId: { in: branchWarehouseIds } } : {}),
         receiptDate: { gte: filters.from, lte: filters.to },
         status: "COMPLETED",
       },

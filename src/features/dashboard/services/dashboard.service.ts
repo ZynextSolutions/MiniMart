@@ -60,6 +60,15 @@ function warehouseWhere(filters: DashboardFilters): Prisma.WarehouseWhereInput {
   };
 }
 
+async function branchWarehouseIds(filters: DashboardFilters): Promise<string[] | undefined> {
+  if (!filters.branchId) return undefined;
+  const warehouses = await prisma.warehouse.findMany({
+    where: warehouseWhere(filters),
+    select: { id: true },
+  });
+  return warehouses.map((w) => w.id);
+}
+
 type LowStockRow = {
   variantId: string;
   productName: string;
@@ -312,11 +321,13 @@ export class DashboardService {
       new Date(startOfOrgDayForDateKey(dateKeyAddDays(orgLocalDateKey(new Date(), timezone), 30), timezone)),
       timezone,
     );
+    const warehouseIds = await branchWarehouseIds(filters);
 
     const batches = await prisma.productBatch.findMany({
       where: {
         remainingQty: { gt: 0 },
         expiryDate: { not: null, gte: now, lte: warningDate },
+        ...(warehouseIds ? { warehouseId: { in: warehouseIds } } : {}),
         variant: {
           product: {
             organizationId: filters.organizationId,
@@ -325,7 +336,7 @@ export class DashboardService {
         },
       },
       orderBy: { expiryDate: "asc" },
-      take: limit * 2,
+      take: limit,
       include: {
         variant: {
           select: {
@@ -337,22 +348,7 @@ export class DashboardService {
       },
     });
 
-    if (filters.branchId) {
-      const branchVariantIds = new Set(
-        (
-          await prisma.stockLevel.findMany({
-            where: { warehouse: warehouseWhere(filters) },
-            select: { variantId: true },
-          })
-        ).map((s) => s.variantId),
-      );
-      return batches
-        .filter((b) => branchVariantIds.has(b.variantId))
-        .slice(0, limit)
-        .map((b) => mapExpiryBatch(b, now));
-    }
-
-    return batches.slice(0, limit).map((b) => mapExpiryBatch(b, now));
+    return batches.map((b) => mapExpiryBatch(b, now));
   }
 
   private static async countExpiringSoon(filters: DashboardFilters): Promise<number> {
@@ -362,32 +358,21 @@ export class DashboardService {
       new Date(startOfOrgDayForDateKey(dateKeyAddDays(orgLocalDateKey(new Date(), timezone), 30), timezone)),
       timezone,
     );
+    const warehouseIds = await branchWarehouseIds(filters);
 
-    const where: Prisma.ProductBatchWhereInput = {
-      remainingQty: { gt: 0 },
-      expiryDate: { not: null, gte: now, lte: warningDate },
-      variant: {
-        product: {
-          organizationId: filters.organizationId,
-          deletedAt: null,
+    return prisma.productBatch.count({
+      where: {
+        remainingQty: { gt: 0 },
+        expiryDate: { not: null, gte: now, lte: warningDate },
+        ...(warehouseIds ? { warehouseId: { in: warehouseIds } } : {}),
+        variant: {
+          product: {
+            organizationId: filters.organizationId,
+            deletedAt: null,
+          },
         },
       },
-    };
-
-    if (filters.branchId) {
-      const branchVariantIds = (
-        await prisma.stockLevel.findMany({
-          where: { warehouse: warehouseWhere(filters) },
-          select: { variantId: true },
-        })
-      ).map((s) => s.variantId);
-
-      return prisma.productBatch.count({
-        where: { ...where, variantId: { in: branchVariantIds } },
-      });
-    }
-
-    return prisma.productBatch.count({ where });
+    });
   }
 }
 

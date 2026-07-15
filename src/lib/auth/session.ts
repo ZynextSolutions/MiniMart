@@ -9,6 +9,8 @@ import {
   type Permission,
 } from "@/lib/permissions/permissions";
 import { SubscriptionGuardService } from "@/platform/subscriptions/subscription-guard.service";
+import { ModuleAccessService } from "@/platform/modules/module-access.service";
+import type { PlatformModuleKey } from "@/platform/modules/platform-modules";
 
 export type AuthSession = Session & {
   user: NonNullable<Session["user"]> & {
@@ -50,6 +52,15 @@ export async function requireSession(options?: {
   );
 
   return session as AuthSession;
+}
+
+export async function requireModuleSession(
+  moduleKey: PlatformModuleKey,
+  options?: { skipSubscriptionCheck?: boolean },
+): Promise<AuthSession> {
+  const session = await requireSession(options);
+  await ModuleAccessService.assertModuleEnabled(session.user.organizationId, moduleKey);
+  return session;
 }
 
 export async function requireOrganizationId() {

@@ -51,6 +51,7 @@ export class CostingEngine {
       const batch = await tx.productBatch.create({
         data: {
           variantId,
+          warehouseId: params.warehouseId,
           batchNumber: batchNumber ?? `BATCH-${Date.now()}`,
           expiryDate: expiryDate ?? null,
           costPrice: unitCost,
@@ -75,7 +76,7 @@ export class CostingEngine {
       avgCost: Decimal;
     },
   ): Promise<StockOutCostResult> {
-    const { variantId, quantity, costingMethod, avgCost } = params;
+    const { variantId, warehouseId, quantity, costingMethod, avgCost } = params;
 
     if (costingMethod === "WEIGHTED_AVERAGE") {
       return {
@@ -86,7 +87,7 @@ export class CostingEngine {
     }
 
     const batches = await tx.productBatch.findMany({
-      where: { variantId, remainingQty: { gt: 0 } },
+      where: { variantId, warehouseId, remainingQty: { gt: 0 } },
       orderBy: [{ receivedAt: "asc" }, { expiryDate: "asc" }],
     });
 

@@ -20,10 +20,10 @@ interface PayableRow {
   id: string;
   invoiceNumber: string;
   supplier: { id: string; name: string; code: string };
-  dueDate: Date;
-  totalAmount: { toString(): string };
-  paidAmount: { toString(): string };
-  outstanding: { toString(): string };
+  dueDate: string;
+  totalAmount: number;
+  paidAmount: number;
+  outstanding: number;
   status: string;
 }
 
@@ -31,14 +31,14 @@ export function PayablesPageClient({ payables }: { payables: PayableRow[] }) {
   const router = useRouter();
   const [paying, setPaying] = useState<string | null>(null);
 
-  const totalOutstanding = payables.reduce((s, p) => s + Number(p.outstanding), 0);
+  const totalOutstanding = payables.reduce((s, p) => s + p.outstanding, 0);
 
   async function quickPay(row: PayableRow) {
     setPaying(row.id);
     const result = await recordSupplierPaymentAction({
       supplierId: row.supplier.id,
       invoiceId: row.id,
-      amount: Number(row.outstanding),
+      amount: row.outstanding,
       paymentDate: new Date().toISOString().slice(0, 10),
       method: "BANK",
     });
@@ -80,7 +80,7 @@ export function PayablesPageClient({ payables }: { payables: PayableRow[] }) {
                   <TableCell>{p.supplier.name}</TableCell>
                   <TableCell>{new Date(p.dueDate).toLocaleDateString()}</TableCell>
                   <TableCell className="font-semibold text-amber-600">
-                    {formatMoney(Number(p.outstanding))}
+                    {formatMoney(p.outstanding)}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{p.status}</Badge>

@@ -26,6 +26,16 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
     getUserBranches(session.user.id),
   ]);
 
+  const serializedOrders = orders.map((o) => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    orderDate: o.orderDate.toISOString(),
+    status: o.status,
+    totalAmount: Number(o.totalAmount),
+    supplier: { name: o.supplier.name, code: o.supplier.code },
+    _count: o._count,
+  }));
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -40,7 +50,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
         />
       </div>
       <OrdersPageClient
-        orders={orders}
+        orders={serializedOrders}
         suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, code: s.code }))}
       />
     </div>

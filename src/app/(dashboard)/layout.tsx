@@ -7,6 +7,7 @@ import { AppFooter } from "@/components/layout/app-footer";
 import { AnnouncementBanners } from "@/components/layout/announcement-banners";
 import { ModuleProvider } from "@/components/providers/module-provider";
 import { ModuleAccessService } from "@/platform/modules/module-access.service";
+import { isRouteAllowed } from "@/platform/modules/platform-modules";
 import { defaultModuleMap } from "@/platform/modules/platform-modules";
 import { SubscriptionGuardService } from "@/platform/subscriptions/subscription-guard.service";
 import { AnnouncementService } from "@/platform/announcements/announcement.service";
@@ -42,6 +43,16 @@ export default async function DashboardLayout({
   const modules = organizationId
     ? await ModuleAccessService.getEnabledModules(organizationId)
     : defaultModuleMap();
+
+  if (
+    organizationId &&
+    session?.user?.sessionType === "organization" &&
+    pathname &&
+    !pathname.startsWith(BILLING_PATH) &&
+    !isRouteAllowed(pathname, modules)
+  ) {
+    redirect(BILLING_PATH);
+  }
 
   const announcements =
     organizationId && session?.user?.sessionType === "organization"

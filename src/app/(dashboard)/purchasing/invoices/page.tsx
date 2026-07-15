@@ -15,6 +15,17 @@ export default async function SupplierInvoicesPage() {
     SupplierService.list(session.user.organizationId, { pageSize: 100 }),
   ]);
 
+  const serializedInvoices = invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    invoiceDate: inv.invoiceDate.toISOString(),
+    dueDate: inv.dueDate.toISOString(),
+    status: inv.status,
+    totalAmount: Number(inv.totalAmount),
+    paidAmount: Number(inv.paidAmount),
+    supplier: { id: inv.supplier.id, name: inv.supplier.name },
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -22,7 +33,7 @@ export default async function SupplierInvoicesPage() {
         <p className="text-muted-foreground">Record AP invoices and payments</p>
       </div>
       <InvoicesPageClient
-        invoices={invoices}
+        invoices={serializedInvoices}
         suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, code: s.code }))}
       />
     </div>

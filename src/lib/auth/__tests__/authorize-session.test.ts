@@ -10,6 +10,7 @@ vi.mock("@/lib/permissions/authorization", () => ({
 
 vi.mock("@/platform/tenant/tenant-prisma", () => ({
   getPrismaBase: vi.fn(),
+  getPrisma: vi.fn(() => ({})),
 }));
 
 vi.mock("@/platform/tenant/tenant-context", () => ({

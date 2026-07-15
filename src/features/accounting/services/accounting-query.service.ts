@@ -193,42 +193,37 @@ export class AccountingQueryService {
   }
 
   static async getReceivablesAging(organizationId: string, asOf: Date) {
-    const customers = await prisma.customer.findMany({
-      where: { organizationId, deletedAt: null, isActive: true },
+    const creditSales = await prisma.sale.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        status: "COMPLETED",
+        saleType: "SALE",
+        customerId: { not: null },
+        saleDate: { lte: asOf },
+        payments: { some: { method: "CREDIT" } },
+      },
       select: {
         id: true,
-        code: true,
-        name: true,
-        ledgerEntries: {
-          where: { entryDate: { lte: asOf } },
-          orderBy: { entryDate: "desc" },
-          take: 1,
+        customerId: true,
+        saleDate: true,
+        payments: { where: { method: "CREDIT" }, select: { amount: true } },
+        returns: {
+          where: {
+            deletedAt: null,
+            status: "COMPLETED",
+            saleType: "RETURN",
+            saleDate: { lte: asOf },
+          },
+          select: {
+            payments: { where: { method: "CREDIT" }, select: { amount: true } },
+          },
         },
+        customer: { select: { id: true, code: true, name: true } },
       },
     });
 
-    const rows = customers
-      .map((c) => {
-        const latest = c.ledgerEntries[0];
-        const balance = latest ? Number(latest.balance) : 0;
-        if (balance <= 0) return null;
-
-        const daysOld = latest
-          ? Math.floor((asOf.getTime() - latest.entryDate.getTime()) / (1000 * 60 * 60 * 24))
-          : 0;
-
-        return {
-          customerId: c.id,
-          code: c.code,
-          name: c.name,
-          balance,
-          current: daysOld <= 30 ? balance : 0,
-          days31to60: daysOld > 30 && daysOld <= 60 ? balance : 0,
-          days61to90: daysOld > 60 && daysOld <= 90 ? balance : 0,
-          over90: daysOld > 90 ? balance : 0,
-        };
-      })
-      .filter(Boolean) as {
+    type CustomerBucket = {
       customerId: string;
       code: string;
       name: string;
@@ -237,7 +232,46 @@ export class AccountingQueryService {
       days31to60: number;
       days61to90: number;
       over90: number;
-    }[];
+    };
+
+    const byCustomer = new Map<string, CustomerBucket>();
+
+    for (const sale of creditSales) {
+      const creditAmount = sale.payments.reduce((s, p) => s + Number(p.amount), 0);
+      const returnCredit = sale.returns.reduce(
+        (s, r) => s + r.payments.reduce((rs, p) => rs + Number(p.amount), 0),
+        0,
+      );
+      const openBalance = creditAmount - returnCredit;
+      if (openBalance <= 0.005 || !sale.customer) continue;
+
+      const daysOld = Math.floor(
+        (asOf.getTime() - sale.saleDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      const row =
+        byCustomer.get(sale.customer.id) ??
+        {
+          customerId: sale.customer.id,
+          code: sale.customer.code,
+          name: sale.customer.name,
+          balance: 0,
+          current: 0,
+          days31to60: 0,
+          days61to90: 0,
+          over90: 0,
+        };
+
+      row.balance += openBalance;
+      if (daysOld <= 30) row.current += openBalance;
+      else if (daysOld <= 60) row.days31to60 += openBalance;
+      else if (daysOld <= 90) row.days61to90 += openBalance;
+      else row.over90 += openBalance;
+
+      byCustomer.set(sale.customer.id, row);
+    }
+
+    const rows = Array.from(byCustomer.values()).filter((r) => r.balance > 0.005);
 
     return {
       rows,
@@ -246,42 +280,21 @@ export class AccountingQueryService {
   }
 
   static async getPayablesAging(organizationId: string, asOf: Date) {
-    const suppliers = await prisma.supplier.findMany({
-      where: { organizationId, deletedAt: null, isActive: true },
+    const invoices = await prisma.supplierInvoice.findMany({
+      where: {
+        organizationId,
+        invoiceDate: { lte: asOf },
+        status: { notIn: ["CANCELLED", "VOID"] },
+      },
       select: {
-        id: true,
-        code: true,
-        name: true,
-        ledgerEntries: {
-          where: { entryDate: { lte: asOf } },
-          orderBy: { entryDate: "desc" },
-          take: 1,
-        },
+        dueDate: true,
+        totalAmount: true,
+        paidAmount: true,
+        supplier: { select: { id: true, code: true, name: true } },
       },
     });
 
-    const rows = suppliers
-      .map((s) => {
-        const latest = s.ledgerEntries[0];
-        const balance = latest ? Number(latest.balance) : 0;
-        if (balance <= 0) return null;
-
-        const daysOld = latest
-          ? Math.floor((asOf.getTime() - latest.entryDate.getTime()) / (1000 * 60 * 60 * 24))
-          : 0;
-
-        return {
-          supplierId: s.id,
-          code: s.code,
-          name: s.name,
-          balance,
-          current: daysOld <= 30 ? balance : 0,
-          days31to60: daysOld > 30 && daysOld <= 60 ? balance : 0,
-          days61to90: daysOld > 60 && daysOld <= 90 ? balance : 0,
-          over90: daysOld > 90 ? balance : 0,
-        };
-      })
-      .filter(Boolean) as {
+    type SupplierBucket = {
       supplierId: string;
       code: string;
       name: string;
@@ -290,7 +303,41 @@ export class AccountingQueryService {
       days31to60: number;
       days61to90: number;
       over90: number;
-    }[];
+    };
+
+    const bySupplier = new Map<string, SupplierBucket>();
+
+    for (const invoice of invoices) {
+      const openBalance = Number(invoice.totalAmount) - Number(invoice.paidAmount);
+      if (openBalance <= 0.005) continue;
+
+      const daysPastDue = Math.floor(
+        (asOf.getTime() - invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      const row =
+        bySupplier.get(invoice.supplier.id) ??
+        {
+          supplierId: invoice.supplier.id,
+          code: invoice.supplier.code,
+          name: invoice.supplier.name,
+          balance: 0,
+          current: 0,
+          days31to60: 0,
+          days61to90: 0,
+          over90: 0,
+        };
+
+      row.balance += openBalance;
+      if (daysPastDue <= 30) row.current += openBalance;
+      else if (daysPastDue <= 60) row.days31to60 += openBalance;
+      else if (daysPastDue <= 90) row.days61to90 += openBalance;
+      else row.over90 += openBalance;
+
+      bySupplier.set(invoice.supplier.id, row);
+    }
+
+    const rows = Array.from(bySupplier.values()).filter((r) => r.balance > 0.005);
 
     return {
       rows,

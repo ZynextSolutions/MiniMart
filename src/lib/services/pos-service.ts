@@ -7,6 +7,7 @@ import {
 } from "@/lib/errors/app-error";
 import { AccountingEngine } from "@/lib/services/accounting-engine";
 import { AuditService } from "@/lib/services/audit-service";
+import { CustomerLedgerService } from "@/lib/services/customer-ledger-service";
 import { InventoryService } from "@/lib/services/inventory-service";
 import { NotificationService } from "@/lib/services/notification-service";
 import {
@@ -18,8 +19,14 @@ import {
 import { generateSaleDocumentNumber } from "@/lib/services/sale-document-number";
 import { TaxSettingsService } from "@/lib/services/tax-settings-service";
 import { normalizeTaxRatePercent } from "@/lib/utils/tax";
-import type { PaymentMethod, SaleType } from "@prisma/client";
+import type { PaymentMethod, Prisma, SaleType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
+
+type Tx = Prisma.TransactionClient;
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 export interface CartLineDTO {
   variantId: string;
@@ -75,6 +82,128 @@ export class PosService {
 
   private static amountsMatch(a: number, b: number): boolean {
     return Math.abs(a - b) <= PosService.PRICE_TOLERANCE;
+  }
+
+  private static sumCreditPayments(payments: PaymentDTO[]): number {
+    return payments
+      .filter((p) => p.method === "CREDIT")
+      .reduce((sum, p) => sum + p.amount, 0);
+  }
+
+  private static async assertCustomerCreditAllowed(
+    customerId: string,
+    organizationId: string,
+    creditAmount: number,
+  ) {
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, organizationId, deletedAt: null },
+    });
+    if (!customer) throw new NotFoundError("Customer");
+    if (Number(customer.creditLimit) <= 0) {
+      throw new ValidationError("Customer is not allowed to pay on credit");
+    }
+    const balance = await CustomerLedgerService.getBalance(customer.id);
+    if (Number(balance) + creditAmount > Number(customer.creditLimit)) {
+      throw new ValidationError("Customer credit limit exceeded");
+    }
+    return customer;
+  }
+
+  private static async applyGiftCardPayments(
+    organizationId: string,
+    payments: PaymentDTO[],
+    tx: Tx,
+    direction: "debit" | "credit",
+  ) {
+    for (const payment of payments) {
+      if (payment.method !== "GIFT_CARD" || !payment.reference) continue;
+
+      const card = await tx.giftCard.findFirst({
+        where: { code: payment.reference, isActive: true },
+        include: { customer: { select: { organizationId: true } } },
+      });
+      if (!card || card.customer?.organizationId !== organizationId) {
+        throw new NotFoundError("Gift card");
+      }
+      if (direction === "debit") {
+        if (card.expiresAt && card.expiresAt < new Date()) {
+          throw new ValidationError("Gift card expired");
+        }
+        const updated = await tx.giftCard.updateMany({
+          where: {
+            code: payment.reference,
+            isActive: true,
+            balance: { gte: payment.amount },
+          },
+          data: { balance: { decrement: payment.amount } },
+        });
+        if (updated.count === 0) {
+          throw new ValidationError("Insufficient gift card balance");
+        }
+      } else {
+        await tx.giftCard.update({
+          where: { code: payment.reference },
+          data: { balance: { increment: payment.amount } },
+        });
+      }
+    }
+  }
+
+  private static computeProportionalReturnTotals(
+    original: {
+      subtotal: Decimal;
+      discountAmount: Decimal;
+      taxAmount: Decimal;
+      grandTotal: Decimal;
+      lines: Array<{
+        variantId: string;
+        quantity: Decimal;
+        unitPrice: Decimal;
+        discountAmount: Decimal;
+        taxAmount: Decimal;
+        lineTotal: Decimal;
+        productName: string;
+        sku: string;
+        costPrice: Decimal;
+        taxRate?: { rate: Decimal } | null;
+      }>;
+    },
+    returnLines: Array<{
+      variantId: string;
+      quantity: number;
+      unitPrice: number;
+      taxRate: number;
+      productName: string;
+      sku: string;
+      costPrice: number;
+    }>,
+  ) {
+    const returnSubtotal = returnLines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
+    const originalSubtotal = Number(original.subtotal);
+    const saleRatio = originalSubtotal > 0 ? returnSubtotal / originalSubtotal : 0;
+
+    const lineDetails = returnLines.map((line) => {
+      const orig = original.lines.find((l) => l.variantId === line.variantId)!;
+      const soldQty = Number(orig.quantity);
+      const lineRatio = soldQty > 0 ? line.quantity / soldQty : 0;
+
+      return {
+        ...line,
+        discountAmount: round2(Number(orig.discountAmount) * lineRatio),
+        taxAmount: round2(Number(orig.taxAmount) * lineRatio),
+        lineTotal: round2(Number(orig.lineTotal) * lineRatio),
+      };
+    });
+
+    return {
+      lineDetails,
+      totals: {
+        subtotal: round2(returnSubtotal),
+        discountAmount: round2(Number(original.discountAmount) * saleRatio),
+        taxAmount: round2(Number(original.taxAmount) * saleRatio),
+        grandTotal: round2(Number(original.grandTotal) * saleRatio),
+      },
+    };
   }
 
   private static async validateRegisterContext(dto: {
@@ -305,7 +434,7 @@ export class PosService {
     return card;
   }
 
-  static async completeSale(dto: CompleteSaleDTO) {
+  static async completeSale(dto: CompleteSaleDTO, options?: { tx?: Tx }) {
     if (dto.lines.length === 0) throw new ValidationError("Cart is empty");
 
     if (dto.idempotencyKey) {
@@ -379,26 +508,29 @@ export class PosService {
       : 0;
 
     if (dto.customerId) {
-      const customer = await prisma.customer.findFirst({
-        where: { id: dto.customerId, organizationId: dto.organizationId, deletedAt: null },
-      });
-      if (!customer) throw new NotFoundError("Customer");
+      const creditAmount = PosService.sumCreditPayments(dto.payments);
+      if (creditAmount > 0) {
+        await PosService.assertCustomerCreditAllowed(
+          dto.customerId,
+          dto.organizationId,
+          creditAmount,
+        );
+      }
+    } else if (PosService.sumCreditPayments(dto.payments) > 0) {
+      throw new ValidationError("Customer is required for credit payment");
+    }
 
-      const creditPayment = dto.payments.find((p) => p.method === "CREDIT");
-      if (creditPayment && Number(customer.creditLimit) > 0) {
-        // Basic credit limit check
-        const ledger = await prisma.customerLedger.findFirst({
-          where: { customerId: customer.id },
-          orderBy: { entryDate: "desc" },
-        });
-        const balance = ledger ? Number(ledger.balance) : 0;
-        if (balance + creditPayment.amount > Number(customer.creditLimit)) {
-          throw new ValidationError("Customer credit limit exceeded");
-        }
+    for (const payment of dto.payments) {
+      if (payment.method === "GIFT_CARD" && payment.reference) {
+        await PosService.validateGiftCard(
+          dto.organizationId,
+          payment.reference,
+          payment.amount,
+        );
       }
     }
 
-    const sale = await prisma.$transaction(async (tx) => {
+    const runInTransaction = async (tx: Tx) => {
       const invoiceNumber = await generateSaleDocumentNumber("INV", dto.organizationId);
 
       const sale = await tx.sale.create({
@@ -486,18 +618,25 @@ export class PosService {
         });
       }
 
-      for (const payment of dto.payments) {
-        if (payment.method === "GIFT_CARD" && payment.reference) {
-          await this.validateGiftCard(
-            dto.organizationId,
-            payment.reference,
-            payment.amount,
-          );
-          await tx.giftCard.update({
-            where: { code: payment.reference },
-            data: { balance: { decrement: payment.amount } },
-          });
-        }
+      await PosService.applyGiftCardPayments(
+        dto.organizationId,
+        dto.payments,
+        tx,
+        "debit",
+      );
+
+      const creditAmount = PosService.sumCreditPayments(dto.payments);
+      if (dto.customerId && creditAmount > 0) {
+        await CustomerLedgerService.postCreditSale(
+          {
+            customerId: dto.customerId,
+            saleId: sale.id,
+            saleDate: sale.saleDate,
+            amount: creditAmount,
+            invoiceNumber: sale.invoiceNumber,
+          },
+          tx,
+        );
       }
 
       if (dto.customerId) {
@@ -524,7 +663,11 @@ export class PosService {
       );
 
       return sale;
-    }, POS_TRANSACTION_OPTIONS);
+    };
+
+    const sale = options?.tx
+      ? await runInTransaction(options.tx)
+      : await prisma.$transaction(runInTransaction, POS_TRANSACTION_OPTIONS);
 
     void NotificationService.checkSaleAlerts({
       organizationId: dto.organizationId,
@@ -630,7 +773,7 @@ export class PosService {
     return sale;
   }
 
-  static async processReturn(dto: ReturnSaleDTO) {
+  static async processReturn(dto: ReturnSaleDTO, options?: { tx?: Tx }) {
     if (dto.idempotencyKey) {
       const existing = await prisma.sale.findFirst({
         where: {
@@ -730,20 +873,17 @@ export class PosService {
       };
     });
 
-    const lineInputs = authoritativeLines.map((l) => ({
-      unitPrice: l.unitPrice,
-      quantity: l.quantity,
-      taxRate: normalizeTaxRatePercent(l.taxRate),
-    }));
-    const taxMode = await TaxSettingsService.getTaxMode(dto.organizationId);
-    const totals = calculateCartTotals(lineInputs, undefined, 0, taxMode);
+    const { lineDetails, totals } = PosService.computeProportionalReturnTotals(
+      original,
+      authoritativeLines,
+    );
 
     const paymentSum = dto.payments.reduce((s, p) => s + p.amount, 0);
     if (Math.abs(paymentSum - totals.grandTotal) > 0.02) {
       throw new ValidationError("Refund payment mismatch");
     }
 
-    const sale = await prisma.$transaction(async (tx) => {
+    const runInTransaction = async (tx: Tx) => {
       const invoiceNumber = await generateSaleDocumentNumber("INV", dto.organizationId);
 
       const sale = await tx.sale.create({
@@ -759,32 +899,26 @@ export class PosService {
           originalSaleId: dto.originalSaleId,
           status: "COMPLETED",
           subtotal: new Decimal(totals.subtotal),
-          discountAmount: new Decimal(0),
-          taxAmount: new Decimal(totals.taxTotal),
+          discountAmount: new Decimal(totals.discountAmount),
+          taxAmount: new Decimal(totals.taxAmount),
           grandTotal: new Decimal(totals.grandTotal),
           amountPaid: new Decimal(totals.grandTotal),
           changeAmount: new Decimal(0),
           idempotencyKey: dto.idempotencyKey,
           notes: dto.notes,
           lines: {
-            create: authoritativeLines.map((line) => {
-              const calc = calculateLine({
-                unitPrice: line.unitPrice,
-                quantity: line.quantity,
-                taxRate: normalizeTaxRatePercent(line.taxRate),
-              }, taxMode);
-              return {
-                variantId: line.variantId,
-                productName: line.productName,
-                sku: line.sku,
-                quantity: new Decimal(line.quantity),
-                unitPrice: new Decimal(line.unitPrice),
-                discountAmount: new Decimal(0),
-                taxAmount: new Decimal(calc.taxAmount),
-                lineTotal: new Decimal(calc.lineTotal),
-                costPrice: new Decimal(line.costPrice),
-              };
-            }),
+            create: lineDetails.map((line) => ({
+              variantId: line.variantId,
+              productName: line.productName,
+              sku: line.sku,
+              quantity: new Decimal(line.quantity),
+              unitPrice: new Decimal(line.unitPrice),
+              discountAmount: new Decimal(line.discountAmount),
+              taxRateId: original.lines.find((l) => l.variantId === line.variantId)?.taxRateId,
+              taxAmount: new Decimal(line.taxAmount),
+              lineTotal: new Decimal(line.lineTotal),
+              costPrice: new Decimal(line.costPrice),
+            })),
           },
           payments: {
             create: dto.payments.map((p) => ({
@@ -803,7 +937,7 @@ export class PosService {
         organizationId: dto.organizationId,
         branchId: dto.branchId,
         userId: dto.userId,
-        lines: authoritativeLines.map((l) => ({
+        lines: lineDetails.map((l) => ({
           variantId: l.variantId,
           quantity: l.quantity,
           unitCost: l.costPrice,
@@ -817,8 +951,8 @@ export class PosService {
         saleId: sale.id,
         saleDate: sale.saleDate,
         subtotal: totals.subtotal,
-        discountAmount: 0,
-        taxAmount: totals.taxTotal,
+        discountAmount: totals.discountAmount,
+        taxAmount: totals.taxAmount,
         grandTotal: totals.grandTotal,
         totalCogs: Number(totalCogs),
         payments: dto.payments,
@@ -826,6 +960,27 @@ export class PosService {
           ? `journal-return-${dto.idempotencyKey}`
           : undefined,
       });
+
+      const creditRefund = PosService.sumCreditPayments(dto.payments);
+      if (original.customerId && creditRefund > 0) {
+        await CustomerLedgerService.postCreditRefund(
+          {
+            customerId: original.customerId,
+            saleId: sale.id,
+            saleDate: sale.saleDate,
+            amount: creditRefund,
+            invoiceNumber: sale.invoiceNumber,
+          },
+          tx,
+        );
+      }
+
+      await PosService.applyGiftCardPayments(
+        dto.organizationId,
+        dto.payments,
+        tx,
+        "credit",
+      );
 
       await AuditService.log(
         {
@@ -841,7 +996,11 @@ export class PosService {
       );
 
       return sale;
-    }, POS_TRANSACTION_OPTIONS);
+    };
+
+    const sale = options?.tx
+      ? await runInTransaction(options.tx)
+      : await prisma.$transaction(runInTransaction, POS_TRANSACTION_OPTIONS);
 
     void NotificationService.checkReturnAlert({
       organizationId: dto.organizationId,
@@ -913,6 +1072,58 @@ export class PosService {
         })),
       });
 
+      if (sale.couponCode) {
+        const coupon = await tx.coupon.findFirst({
+          where: {
+            organizationId: dto.organizationId,
+            code: sale.couponCode.toUpperCase(),
+          },
+        });
+        if (coupon && coupon.usedCount > 0) {
+          await tx.coupon.update({
+            where: { id: coupon.id },
+            data: { usedCount: { decrement: 1 } },
+          });
+        }
+      }
+
+      await PosService.applyGiftCardPayments(
+        dto.organizationId,
+        sale.payments.map((p) => ({
+          method: p.method,
+          amount: Number(p.amount),
+          reference: p.reference ?? undefined,
+        })),
+        tx,
+        "credit",
+      );
+
+      if (sale.customerId) {
+        const creditAmount = sale.payments
+          .filter((p) => p.method === "CREDIT")
+          .reduce((sum, p) => sum + Number(p.amount), 0);
+        if (creditAmount > 0) {
+          await CustomerLedgerService.postCreditRefund(
+            {
+              customerId: sale.customerId,
+              saleId: sale.id,
+              saleDate: new Date(),
+              amount: creditAmount,
+              invoiceNumber: sale.invoiceNumber,
+            },
+            tx,
+          );
+        }
+
+        const pointsEarned = Math.floor(Number(sale.grandTotal) / 100);
+        if (pointsEarned > 0) {
+          await tx.customer.update({
+            where: { id: sale.customerId },
+            data: { loyaltyPoints: { decrement: pointsEarned } },
+          });
+        }
+      }
+
       await AuditService.log(
         {
           organizationId: dto.organizationId,
@@ -934,24 +1145,36 @@ export class PosService {
     newLines: CompleteSaleDTO["lines"];
     newPayments: CompleteSaleDTO["payments"];
   }) {
-    const returnSale = await this.processReturn({
-      ...dto,
-      lines: dto.lines,
-      payments: dto.payments,
-    });
+    const exchangeIdempotency = dto.idempotencyKey ?? `exchange-${Date.now()}`;
 
-    const exchangeSale = await this.completeSale({
-      organizationId: dto.organizationId,
-      branchId: dto.branchId,
-      warehouseId: dto.warehouseId,
-      userId: dto.userId,
-      sessionId: dto.sessionId,
-      cashRegisterId: dto.cashRegisterId,
-      lines: dto.newLines,
-      payments: dto.newPayments,
-      notes: `Exchange for ${returnSale.invoiceNumber}`,
-    });
+    return prisma.$transaction(async (tx) => {
+      const returnSale = await PosService.processReturn(
+        {
+          ...dto,
+          lines: dto.lines,
+          payments: dto.payments,
+          idempotencyKey: `${exchangeIdempotency}-return`,
+        },
+        { tx },
+      );
 
-    return { returnSale, exchangeSale };
+      const exchangeSale = await PosService.completeSale(
+        {
+          organizationId: dto.organizationId,
+          branchId: dto.branchId,
+          warehouseId: dto.warehouseId,
+          userId: dto.userId,
+          sessionId: dto.sessionId,
+          cashRegisterId: dto.cashRegisterId,
+          lines: dto.newLines,
+          payments: dto.newPayments,
+          notes: `Exchange for ${returnSale.invoiceNumber}`,
+          idempotencyKey: `${exchangeIdempotency}-sale`,
+        },
+        { tx },
+      );
+
+      return { returnSale, exchangeSale };
+    }, POS_TRANSACTION_OPTIONS);
   }
 }

@@ -42,9 +42,9 @@ import {
 interface OrderRow {
   id: string;
   orderNumber: string;
-  orderDate: Date;
+  orderDate: string;
   status: string;
-  totalAmount: { toString(): string };
+  totalAmount: number;
   supplier: { name: string; code: string };
   _count: { lines: number };
 }

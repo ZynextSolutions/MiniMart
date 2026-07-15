@@ -380,6 +380,73 @@ export class AccountingEngine {
     });
   }
 
+  static async postSupplierReturn(
+    tx: Tx,
+    input: {
+      organizationId: string;
+      branchId: string;
+      userId: string;
+      returnId: string;
+      returnDate: Date;
+      totalValue: number;
+    },
+  ) {
+    if (input.totalValue <= 0) return null;
+
+    const mapping = await this.getAccountMapping(input.organizationId);
+    const { fiscalYearId, periodId } = await this.getCurrentPeriod(
+      input.organizationId,
+      input.returnDate,
+    );
+
+    const lines: JournalLineInput[] = [
+      {
+        accountCode: mapping.accountsPayable,
+        debit: input.totalValue,
+        credit: 0,
+        description: "Supplier return — AP reduction",
+      },
+      {
+        accountCode: mapping.inventory,
+        debit: 0,
+        credit: input.totalValue,
+        description: "Supplier return — inventory reduction",
+      },
+    ];
+
+    this.validateBalance(lines);
+
+    const entryNumber = await generateSaleDocumentNumber("JRN", input.organizationId);
+
+    return tx.journalEntry.create({
+      data: {
+        organizationId: input.organizationId,
+        branchId: input.branchId,
+        fiscalYearId,
+        periodId,
+        entryNumber,
+        entryDate: input.returnDate,
+        description: `Supplier return ${input.returnId}`,
+        referenceType: "SupplierReturn",
+        referenceId: input.returnId,
+        status: "COMPLETED",
+        isAutoPosted: true,
+        createdById: input.userId,
+        lines: {
+          create: await Promise.all(
+            lines.map(async (line, index) => ({
+              accountId: await this.getAccountId(input.organizationId, line.accountCode),
+              description: line.description,
+              debit: new Decimal(line.debit),
+              credit: new Decimal(line.credit),
+              lineOrder: index,
+            })),
+          ),
+        },
+      },
+    });
+  }
+
   static async postSupplierPayment(
     tx: Tx,
     input: {
