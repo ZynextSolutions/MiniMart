@@ -10,7 +10,15 @@ import { getErrorMessage } from "@/lib/errors/app-error";
 import { PurchasingService } from "@/lib/services/purchasing-service";
 import { PurchasingQueryService } from "@/features/purchasing/services/purchasing-query.service";
 
-const lineSchema = z.object({
+const invoiceLineSchema = z.object({
+  goodsReceiptLineId: z.string().uuid(),
+  variantId: z.string().uuid(),
+  quantity: z.number().positive(),
+  unitCost: z.number().nonnegative(),
+  taxAmount: z.number().nonnegative().optional(),
+});
+
+const receiptLineSchema = z.object({
   variantId: z.string().uuid(),
   quantity: z.number().positive(),
   unitCost: z.number().nonnegative(),
@@ -175,19 +183,19 @@ export async function createGoodsReceiptAction(input: {
   purchaseOrderId?: string;
   receiptDate: string;
   notes?: string;
-  lines: z.infer<typeof lineSchema>[];
+  lines: z.infer<typeof receiptLineSchema>[];
 }) {
   try {
     const session = await requirePurchasingSession(PERMISSIONS.PURCHASING.RECEIVE);
     const data = {
       ...input,
       receiptDate: new Date(input.receiptDate),
-      lines: z.array(lineSchema).parse(input.lines),
+      lines: z.array(receiptLineSchema).parse(input.lines),
     };
     const receipt = await PurchasingService.createGoodsReceipt(data, ctx(session));
     revalidatePath("/purchasing/receiving");
     revalidatePath("/inventory");
-    return { success: true, receipt };
+    return { success: true, receiptNumber: receipt.receiptNumber };
   } catch (e) {
     return { success: false, error: getErrorMessage(e) };
   }
@@ -203,12 +211,26 @@ export async function listSupplierInvoicesAction(params?: { branchId?: string })
   });
 }
 
+export async function listInvoiceableGoodsReceiptsAction(supplierId?: string) {
+  const session = await requirePurchasingSession(PERMISSIONS.PURCHASING.INVOICE_MANAGE);
+  return PurchasingQueryService.listInvoiceableGoodsReceipts(
+    session.user.organizationId,
+    supplierId,
+  );
+}
+
+export async function getGoodsReceiptForInvoicingAction(id: string) {
+  const session = await requirePurchasingSession(PERMISSIONS.PURCHASING.INVOICE_MANAGE);
+  return PurchasingQueryService.getGoodsReceiptForInvoicing(id, session.user.organizationId);
+}
+
 export async function createSupplierInvoiceAction(input: {
   supplierId: string;
+  goodsReceiptId: string;
   supplierRef?: string;
   invoiceDate: string;
   dueDate: string;
-  lines: { variantId: string; quantity: number; unitCost: number; taxAmount?: number }[];
+  lines: z.infer<typeof invoiceLineSchema>[];
 }) {
   try {
     const session = await requirePurchasingSession(PERMISSIONS.PURCHASING.INVOICE_MANAGE);
@@ -217,12 +239,17 @@ export async function createSupplierInvoiceAction(input: {
         ...input,
         invoiceDate: new Date(input.invoiceDate),
         dueDate: new Date(input.dueDate),
+        lines: z.array(invoiceLineSchema).parse(input.lines),
       },
       ctx(session),
     );
     revalidatePath("/purchasing/invoices");
     revalidatePath("/purchasing/payables");
-    return { success: true, invoice };
+    return {
+      success: true,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+    };
   } catch (e) {
     return { success: false, error: getErrorMessage(e) };
   }

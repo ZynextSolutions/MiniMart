@@ -54,9 +54,6 @@ export function AppSidebar({
   const { hasPermission } = usePermission();
   const { isModuleEnabled } = useModules();
   const [iconCollapsed, setIconCollapsed] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<
-    Record<string, boolean>
-  >({});
 
   useEffect(() => {
     if (!collapsible) return;
@@ -144,58 +141,46 @@ export function AppSidebar({
     [filterNavItems],
   );
 
+  const autoCollapsedSections = useMemo(() => {
+    const next: Record<string, boolean> = {};
+
+    for (const group of visibleMainGroups) {
+      const groupKey = `group:${group.title}`;
+      const groupHasActive = group.items.some((item) => navItemIsActive(item));
+      next[groupKey] = !groupHasActive;
+
+      for (const item of group.items) {
+        if (!item.children?.length) continue;
+        const subKey = `nav:${item.title}`;
+        next[subKey] = !navItemIsActive(item);
+      }
+    }
+
+    next["group:Settings"] = !visibleSettings.some((item) => navItemIsActive(item));
+
+    return next;
+  }, [navItemIsActive, visibleMainGroups, visibleSettings]);
+
+  const [manualSectionOverrides, setManualSectionOverrides] = useState<
+    Record<string, boolean>
+  >({});
+
   useEffect(() => {
-    if (isIconMode) return;
+    setManualSectionOverrides({});
+  }, [pathname]);
 
-    setCollapsedSections((prev) => {
-      let changed = false;
-      const next = { ...prev };
-
-      for (const group of visibleMainGroups) {
-        const key = `group:${group.title}`;
-        const groupHasActive = group.items.some((item) => navItemIsActive(item));
-
-        if (next[key] === undefined) {
-          next[key] = !groupHasActive;
-          changed = true;
-        }
-        if (groupHasActive && next[key]) {
-          next[key] = false;
-          changed = true;
-        }
-
-        for (const item of group.items) {
-          if (!item.children?.length) continue;
-          const subKey = `nav:${item.title}`;
-          const subActive = navItemIsActive(item);
-          if (next[subKey] === undefined) {
-            next[subKey] = !subActive;
-            changed = true;
-          }
-          if (subActive && next[subKey]) {
-            next[subKey] = false;
-            changed = true;
-          }
-        }
-      }
-
-      const settingsKey = "group:Settings";
-      const settingsHasActive = visibleSettings.some((item) => navItemIsActive(item));
-      if (next[settingsKey] === undefined) {
-        next[settingsKey] = !settingsHasActive;
-        changed = true;
-      }
-      if (settingsHasActive && next[settingsKey]) {
-        next[settingsKey] = false;
-        changed = true;
-      }
-
-      return changed ? next : prev;
-    });
-  }, [isIconMode, navItemIsActive, visibleMainGroups, visibleSettings]);
+  function isSectionCollapsed(key: string) {
+    if (Object.hasOwn(manualSectionOverrides, key)) {
+      return manualSectionOverrides[key];
+    }
+    return autoCollapsedSections[key] ?? true;
+  }
 
   function toggleSection(key: string) {
-    setCollapsedSections((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }));
+    setManualSectionOverrides((prev) => ({
+      ...prev,
+      [key]: !isSectionCollapsed(key),
+    }));
   }
 
   function renderIconLink(item: VisibleNavItem) {
@@ -270,7 +255,7 @@ export function AppSidebar({
     const subKey = `nav:${item.title}`;
 
     if (item.children && item.children.length > 0) {
-      const isExpanded = !collapsedSections[subKey];
+      const isExpanded = !isSectionCollapsed(subKey);
       const isActive = navItemIsActive(item);
 
       return (
@@ -422,7 +407,7 @@ export function AppSidebar({
               {visibleMainGroups.map((group, groupIndex) => {
                 const GroupIcon = group.icon;
                 const groupKey = `group:${group.title}`;
-                const isCollapsed = collapsedSections[groupKey];
+                const isCollapsed = isSectionCollapsed(groupKey);
 
                 return (
                   <div key={group.title}>
@@ -457,18 +442,18 @@ export function AppSidebar({
                     type="button"
                     className="mb-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
                     onClick={() => toggleSection("group:Settings")}
-                    aria-expanded={!collapsedSections["group:Settings"]}
+                    aria-expanded={!isSectionCollapsed("group:Settings")}
                   >
                     <Settings className="h-3.5 w-3.5 shrink-0" />
                     <span className="flex-1 text-left">Settings</span>
                     <ChevronDown
                       className={cn(
                         "h-3.5 w-3.5 shrink-0 transition-transform",
-                        collapsedSections["group:Settings"] ? "-rotate-90" : "rotate-0",
+                        isSectionCollapsed("group:Settings") ? "-rotate-90" : "rotate-0",
                       )}
                     />
                   </button>
-                  {!collapsedSections["group:Settings"] && (
+                  {!isSectionCollapsed("group:Settings") && (
                     <nav className="space-y-1">
                       {visibleSettings.map((item) => renderNavItem(item))}
                     </nav>

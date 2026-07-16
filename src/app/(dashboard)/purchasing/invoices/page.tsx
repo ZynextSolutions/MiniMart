@@ -23,6 +23,8 @@ export default async function SupplierInvoicesPage() {
     status: inv.status,
     totalAmount: Number(inv.totalAmount),
     paidAmount: Number(inv.paidAmount),
+    varianceAmount: Number(inv.varianceAmount),
+    goodsReceiptNumber: inv.goodsReceipt?.receiptNumber ?? null,
     supplier: { id: inv.supplier.id, name: inv.supplier.name },
   }));
 
@@ -30,7 +32,7 @@ export default async function SupplierInvoicesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Supplier Invoices</h1>
-        <p className="text-muted-foreground">Record AP invoices and payments</p>
+        <p className="text-muted-foreground">Record AP invoices linked to goods receipts with cost reconciliation</p>
       </div>
       <InvoicesPageClient
         invoices={serializedInvoices}

@@ -137,9 +137,88 @@ export class PurchasingQueryService {
       orderBy: { invoiceDate: "desc" },
       include: {
         supplier: { select: { id: true, name: true, code: true } },
+        goodsReceipt: { select: { id: true, receiptNumber: true } },
         _count: { select: { lines: true } },
       },
     });
+  }
+
+  static async listInvoiceableGoodsReceipts(
+    organizationId: string,
+    supplierId?: string,
+  ) {
+    const receipts = await prisma.goodsReceipt.findMany({
+      where: {
+        organizationId,
+        status: "COMPLETED",
+        invoicingStatus: { in: ["PENDING", "PARTIAL"] },
+      },
+      orderBy: { receiptDate: "desc" },
+      include: {
+        purchaseOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            supplierId: true,
+            supplier: { select: { id: true, name: true, code: true } },
+          },
+        },
+        lines: true,
+      },
+    });
+
+    const filtered = supplierId
+      ? receipts.filter(
+          (r) => !r.purchaseOrder || r.purchaseOrder.supplierId === supplierId,
+        )
+      : receipts;
+
+    const variantIds = [...new Set(filtered.flatMap((r) => r.lines.map((l) => l.variantId)))];
+    const variants = variantIds.length
+      ? await prisma.productVariant.findMany({
+          where: { id: { in: variantIds } },
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            product: { select: { name: true, unit: { select: { abbreviation: true } } } },
+          },
+        })
+      : [];
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+    return filtered
+      .map((receipt) => ({
+        id: receipt.id,
+        receiptNumber: receipt.receiptNumber,
+        receiptDate: receipt.receiptDate,
+        purchaseOrder: receipt.purchaseOrder
+          ? {
+              orderNumber: receipt.purchaseOrder.orderNumber,
+              supplier: receipt.purchaseOrder.supplier,
+            }
+          : null,
+        lines: receipt.lines
+          .map((line) => {
+            const remaining = Number(line.quantity) - Number(line.invoicedQty);
+            return {
+              id: line.id,
+              variantId: line.variantId,
+              quantity: Number(line.quantity),
+              invoicedQty: Number(line.invoicedQty),
+              remainingQty: remaining,
+              unitCost: Number(line.unitCost),
+              variant: variantMap.get(line.variantId),
+            };
+          })
+          .filter((line) => line.remainingQty > 0),
+      }))
+      .filter((receipt) => receipt.lines.length > 0);
+  }
+
+  static async getGoodsReceiptForInvoicing(id: string, organizationId: string) {
+    const receipts = await this.listInvoiceableGoodsReceipts(organizationId);
+    return receipts.find((r) => r.id === id) ?? null;
   }
 
   static async getOutstandingPayables(organizationId: string) {

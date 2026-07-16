@@ -1,9 +1,8 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "downlevelIteration": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "noEmit": true
   },
   "include": ["./**/*.ts"],

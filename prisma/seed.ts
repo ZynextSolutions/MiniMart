@@ -82,6 +82,7 @@ const CHART_OF_ACCOUNTS = [
   { code: "4200", name: "Other Income", type: AccountType.REVENUE, subtype: AccountSubtype.OTHER, normalBalance: "CREDIT", isSystem: true },
   { code: "5000", name: "Expenses", type: AccountType.EXPENSE, subtype: AccountSubtype.OTHER, normalBalance: "DEBIT", isSystem: true },
   { code: "5100", name: "Cost of Goods Sold", type: AccountType.EXPENSE, subtype: AccountSubtype.COGS, normalBalance: "DEBIT", isSystem: true },
+  { code: "5150", name: "Purchase Price Variance", type: AccountType.EXPENSE, subtype: AccountSubtype.OTHER, normalBalance: "DEBIT", isSystem: true },
   { code: "5200", name: "Operating Expenses", type: AccountType.EXPENSE, subtype: AccountSubtype.OTHER, normalBalance: "DEBIT", isSystem: true },
 ];
 
@@ -495,6 +496,7 @@ async function seedAccountingMaster(orgId: string) {
     "4100": "4000",
     "4200": "4000",
     "5100": "5000",
+    "5150": "5000",
     "5200": "5000",
   };
 

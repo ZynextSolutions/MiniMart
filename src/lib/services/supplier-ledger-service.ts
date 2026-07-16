@@ -85,22 +85,31 @@ export class SupplierLedgerService {
       },
       include: {
         supplier: { select: { id: true, name: true, code: true } },
+        goodsReceipt: { select: { receiptNumber: true } },
       },
       orderBy: { dueDate: "asc" },
     });
 
     return invoices
-      .map((inv) => ({
-        id: inv.id,
-        invoiceNumber: inv.invoiceNumber,
-        supplier: inv.supplier,
-        invoiceDate: inv.invoiceDate,
-        dueDate: inv.dueDate,
-        totalAmount: inv.totalAmount,
-        paidAmount: inv.paidAmount,
-        outstanding: inv.totalAmount.sub(inv.paidAmount),
-        status: inv.status,
-      }))
-      .filter((inv) => inv.outstanding.gt(0));
+      .map((inv) => {
+        const totalAmount = Number(inv.totalAmount);
+        const paidAmount = Number(inv.paidAmount);
+        const outstanding = totalAmount - paidAmount;
+
+        return {
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          supplier: inv.supplier,
+          invoiceDate: inv.invoiceDate.toISOString(),
+          dueDate: inv.dueDate.toISOString(),
+          totalAmount,
+          paidAmount,
+          outstanding,
+          varianceAmount: Number(inv.varianceAmount),
+          goodsReceiptNumber: inv.goodsReceipt?.receiptNumber ?? null,
+          status: inv.status,
+        };
+      })
+      .filter((inv) => inv.outstanding > 0);
   }
 }

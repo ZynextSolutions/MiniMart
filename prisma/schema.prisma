@@ -47,6 +47,12 @@ enum DocumentStatus {
   VOID
 }
 
+enum GrnInvoicingStatus {
+  PENDING
+  PARTIAL
+  RECONCILED
+}
+
 enum PaymentMethod {
   CASH
   CARD
@@ -1031,19 +1037,21 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
-  id              String         @id @default(uuid()) @db.Uuid
-  organizationId  String         @map("organization_id") @db.Uuid
-  purchaseOrderId String?        @map("purchase_order_id") @db.Uuid
-  warehouseId     String         @map("warehouse_id") @db.Uuid
-  receiptNumber   String         @map("receipt_number")
-  receiptDate     DateTime       @map("receipt_date") @db.Date
-  status          DocumentStatus @default(COMPLETED)
+  id              String             @id @default(uuid()) @db.Uuid
+  organizationId  String             @map("organization_id") @db.Uuid
+  purchaseOrderId String?            @map("purchase_order_id") @db.Uuid
+  warehouseId     String             @map("warehouse_id") @db.Uuid
+  receiptNumber   String             @map("receipt_number")
+  receiptDate     DateTime           @map("receipt_date") @db.Date
+  status          DocumentStatus     @default(COMPLETED)
+  invoicingStatus GrnInvoicingStatus @default(PENDING) @map("invoicing_status")
   notes           String?
-  createdAt       DateTime       @default(now()) @map("created_at")
-  createdById     String?        @map("created_by_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at")
+  createdById     String?            @map("created_by_id") @db.Uuid
 
-  purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
-  lines         GoodsReceiptLine[]
+  purchaseOrder    PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
+  lines            GoodsReceiptLine[]
+  supplierInvoices SupplierInvoice[]
 
   @@unique([organizationId, receiptNumber])
   @@map("goods_receipts")
@@ -1054,50 +1062,63 @@ model GoodsReceiptLine {
   goodsReceiptId String    @map("goods_receipt_id") @db.Uuid
   variantId      String    @map("variant_id") @db.Uuid
   quantity       Decimal   @db.Decimal(19, 4)
+  invoicedQty    Decimal   @default(0) @map("invoiced_qty") @db.Decimal(19, 4)
   unitCost       Decimal   @map("unit_cost") @db.Decimal(19, 4)
   batchNumber    String?   @map("batch_number")
   expiryDate     DateTime? @map("expiry_date") @db.Date
 
-  goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  goodsReceipt         GoodsReceipt          @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  supplierInvoiceLines SupplierInvoiceLine[]
 
   @@index([goodsReceiptId])
   @@map("goods_receipt_lines")
 }
 
 model SupplierInvoice {
-  id             String         @id @default(uuid()) @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
-  supplierId     String         @map("supplier_id") @db.Uuid
-  invoiceNumber  String         @map("invoice_number")
-  supplierRef    String?        @map("supplier_ref")
-  invoiceDate    DateTime       @map("invoice_date") @db.Date
-  dueDate        DateTime       @map("due_date") @db.Date
-  status         DocumentStatus @default(PENDING)
-  subtotal       Decimal        @db.Decimal(19, 4)
-  taxAmount      Decimal        @map("tax_amount") @db.Decimal(19, 4)
-  totalAmount    Decimal        @map("total_amount") @db.Decimal(19, 4)
-  paidAmount     Decimal        @default(0) @map("paid_amount") @db.Decimal(19, 4)
-  createdAt      DateTime       @default(now()) @map("created_at")
-  createdById    String?        @map("created_by_id") @db.Uuid
+  id                   String             @id @default(uuid()) @db.Uuid
+  organizationId       String             @map("organization_id") @db.Uuid
+  supplierId           String             @map("supplier_id") @db.Uuid
+  goodsReceiptId       String?            @map("goods_receipt_id") @db.Uuid
+  purchaseOrderId      String?            @map("purchase_order_id") @db.Uuid
+  invoiceNumber        String             @map("invoice_number")
+  supplierRef          String?            @map("supplier_ref")
+  invoiceDate          DateTime           @map("invoice_date") @db.Date
+  dueDate              DateTime           @map("due_date") @db.Date
+  status               DocumentStatus     @default(PENDING)
+  reconciliationStatus GrnInvoicingStatus @default(PENDING) @map("reconciliation_status")
+  grnSubtotal          Decimal?           @map("grn_subtotal") @db.Decimal(19, 4)
+  varianceAmount       Decimal            @default(0) @map("variance_amount") @db.Decimal(19, 4)
+  subtotal             Decimal            @db.Decimal(19, 4)
+  taxAmount            Decimal            @map("tax_amount") @db.Decimal(19, 4)
+  totalAmount          Decimal            @map("total_amount") @db.Decimal(19, 4)
+  paidAmount           Decimal            @default(0) @map("paid_amount") @db.Decimal(19, 4)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  createdById          String?            @map("created_by_id") @db.Uuid
 
-  supplier Supplier              @relation(fields: [supplierId], references: [id])
-  lines    SupplierInvoiceLine[]
+  supplier      Supplier              @relation(fields: [supplierId], references: [id])
+  goodsReceipt  GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id])
+  lines         SupplierInvoiceLine[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([supplierId])
+  @@index([goodsReceiptId])
   @@map("supplier_invoices")
 }
 
 model SupplierInvoiceLine {
-  id                String  @id @default(uuid()) @db.Uuid
-  supplierInvoiceId String  @map("supplier_invoice_id") @db.Uuid
-  variantId         String  @map("variant_id") @db.Uuid
-  quantity          Decimal @db.Decimal(19, 4)
-  unitCost          Decimal @map("unit_cost") @db.Decimal(19, 4)
-  taxAmount         Decimal @map("tax_amount") @db.Decimal(19, 4)
-  lineTotal         Decimal @map("line_total") @db.Decimal(19, 4)
+  id                 String  @id @default(uuid()) @db.Uuid
+  supplierInvoiceId  String  @map("supplier_invoice_id") @db.Uuid
+  goodsReceiptLineId String? @map("goods_receipt_line_id") @db.Uuid
+  variantId          String  @map("variant_id") @db.Uuid
+  quantity           Decimal @db.Decimal(19, 4)
+  grnUnitCost        Decimal? @map("grn_unit_cost") @db.Decimal(19, 4)
+  unitCost           Decimal @map("unit_cost") @db.Decimal(19, 4)
+  varianceAmount     Decimal @default(0) @map("variance_amount") @db.Decimal(19, 4)
+  taxAmount          Decimal @map("tax_amount") @db.Decimal(19, 4)
+  lineTotal          Decimal @map("line_total") @db.Decimal(19, 4)
 
-  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  supplierInvoice  SupplierInvoice   @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  goodsReceiptLine GoodsReceiptLine? @relation(fields: [goodsReceiptLineId], references: [id])
 
   @@map("supplier_invoice_lines")
 }

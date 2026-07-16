@@ -23,5 +23,6 @@ export const DEFAULT_CHART_OF_ACCOUNTS = [
   { code: "4200", name: "Other Income", type: AccountType.REVENUE, subtype: AccountSubtype.OTHER, normalBalance: "CREDIT", isSystem: true },
   { code: "5000", name: "Expenses", type: AccountType.EXPENSE, subtype: AccountSubtype.OTHER, normalBalance: "DEBIT", isSystem: true },
   { code: "5100", name: "Cost of Goods Sold", type: AccountType.EXPENSE, subtype: AccountSubtype.COGS, normalBalance: "DEBIT", isSystem: true },
+  { code: "5150", name: "Purchase Price Variance", type: AccountType.EXPENSE, subtype: AccountSubtype.OTHER, normalBalance: "DEBIT", isSystem: true },
   { code: "5200", name: "Operating Expenses", type: AccountType.EXPENSE, subtype: AccountSubtype.OTHER, normalBalance: "DEBIT", isSystem: true },
 ] as const;

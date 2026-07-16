@@ -11,22 +11,15 @@ export default async function PayablesPage() {
 
   await authorizeSession(session, PERMISSIONS.PURCHASING.INVOICE_MANAGE);
 
-  const payables = (
-    await PurchasingQueryService.getOutstandingPayables(session.user.organizationId)
-  ).map((p) => ({
-    ...p,
-    invoiceDate: p.invoiceDate.toISOString(),
-    dueDate: p.dueDate.toISOString(),
-    totalAmount: Number(p.totalAmount),
-    paidAmount: Number(p.paidAmount),
-    outstanding: Number(p.outstanding),
-  }));
+  const payables = await PurchasingQueryService.getOutstandingPayables(
+    session.user.organizationId,
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Outstanding Payables</h1>
-        <p className="text-muted-foreground">Unpaid supplier invoices</p>
+        <p className="text-muted-foreground">Unpaid supplier invoices linked to goods receipts</p>
       </div>
       <PayablesPageClient payables={payables} />
     </div>

@@ -315,6 +315,8 @@ export class AccountingEngine {
       subtotal: number;
       taxAmount: number;
       totalAmount: number;
+      grnSubtotal?: number;
+      varianceAmount?: number;
     },
   ) {
     const mapping = await this.getAccountMapping(input.organizationId);
@@ -323,12 +325,14 @@ export class AccountingEngine {
       input.invoiceDate,
     );
 
+    const grnSubtotal = input.grnSubtotal ?? input.subtotal;
+    const varianceAmount = input.varianceAmount ?? 0;
     const lines: JournalLineInput[] = [
       {
         accountCode: mapping.inventory,
-        debit: input.subtotal,
+        debit: grnSubtotal,
         credit: 0,
-        description: "Inventory purchase",
+        description: "Inventory at goods receipt value",
       },
       {
         accountCode: mapping.accountsPayable,
@@ -338,8 +342,26 @@ export class AccountingEngine {
       },
     ];
 
+    if (Math.abs(varianceAmount) > 0.0001) {
+      if (varianceAmount > 0) {
+        lines.splice(1, 0, {
+          accountCode: mapping.purchasePriceVariance,
+          debit: varianceAmount,
+          credit: 0,
+          description: "Purchase price variance",
+        });
+      } else {
+        lines.splice(1, 0, {
+          accountCode: mapping.purchasePriceVariance,
+          debit: 0,
+          credit: Math.abs(varianceAmount),
+          description: "Purchase price variance (favorable)",
+        });
+      }
+    }
+
     if (input.taxAmount > 0) {
-      lines.splice(1, 0, {
+      lines.splice(lines.length - 1, 0, {
         accountCode: mapping.salesTaxPayable,
         debit: input.taxAmount,
         credit: 0,

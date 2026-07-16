@@ -31,6 +31,7 @@ interface ReceiptRow {
   receiptNumber: string;
   receiptDate: Date;
   status: string;
+  invoicingStatus: string;
   purchaseOrder: { orderNumber: string } | null;
   _count: { lines: number };
 }
@@ -107,7 +108,7 @@ export function ReceivingPageClient({
     });
     setSubmitting(false);
     if (result.success) {
-      toast.success(`Received ${result.receipt?.receiptNumber}`);
+      toast.success(`Received ${result.receiptNumber}`);
       setLines([]);
       router.refresh();
     } else toast.error(result.error);
@@ -193,7 +194,8 @@ export function ReceivingPageClient({
               <TableHead>PO</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Lines</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Receipt</TableHead>
+              <TableHead>Invoicing</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -205,6 +207,23 @@ export function ReceivingPageClient({
                 <TableCell>{r._count.lines}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{r.status}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      r.invoicingStatus === "RECONCILED"
+                        ? "default"
+                        : r.invoicingStatus === "PARTIAL"
+                          ? "outline"
+                          : "secondary"
+                    }
+                  >
+                    {r.invoicingStatus === "PENDING"
+                      ? "Pending Invoice"
+                      : r.invoicingStatus === "PARTIAL"
+                        ? "Partially Invoiced"
+                        : "Invoiced"}
+                  </Badge>
                 </TableCell>
               </TableRow>
             ))}

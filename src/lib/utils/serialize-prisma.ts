@@ -6,6 +6,13 @@ import {
 } from "@/platform/modules/platform-modules";
 import type { PlanLimits } from "@/platform/subscriptions/plan-limits.types";
 
+/** Convert Prisma Decimal (or similar) to a plain number for Client Components. */
+export function decimalToNumber(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === "number") return value;
+  return Number(String(value));
+}
+
 /** Convert Prisma Decimal (or similar) to a plain string for Client Components. */
 export function serializeDecimal(value: unknown): string {
   if (value == null) return "0";

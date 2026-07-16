@@ -7,6 +7,10 @@ import { NotificationService } from "@/lib/services/notification-service";
 import { generatePurchaseDocumentNumber } from "@/lib/services/purchase-document-number";
 import { SupplierLedgerService } from "@/lib/services/supplier-ledger-service";
 import {
+  PurchaseReconciliationService,
+  type InvoiceLineInput,
+} from "@/lib/services/purchase-reconciliation.service";
+import {
   assertSupplierBelongsToOrg,
   assertVariantsBelongToOrg,
   assertWarehouseAccess,
@@ -354,10 +358,11 @@ export class PurchasingService {
   static async createSupplierInvoice(
     input: {
       supplierId: string;
+      goodsReceiptId: string;
       supplierRef?: string;
       invoiceDate: Date;
       dueDate: Date;
-      lines: { variantId: string; quantity: number; unitCost: number; taxAmount?: number }[];
+      lines: InvoiceLineInput[];
     },
     ctx: ServiceContext,
   ) {
@@ -370,35 +375,61 @@ export class PurchasingService {
     );
 
     const invoiceNumber = await generatePurchaseDocumentNumber("AP", ctx.organizationId);
-    let subtotal = 0;
     let taxAmount = 0;
 
-    const lineData = input.lines.map((l) => {
-      const tax = l.taxAmount ?? 0;
-      const total = lineTotal(l.quantity, l.unitCost, tax);
-      subtotal += l.quantity * l.unitCost;
-      taxAmount += tax;
-      return {
-        variantId: l.variantId,
-        quantity: new Decimal(l.quantity),
-        unitCost: new Decimal(l.unitCost),
-        taxAmount: new Decimal(tax),
-        lineTotal: new Decimal(total),
-      };
-    });
-
-    const totalAmount = subtotal + taxAmount;
-
     return prisma.$transaction(async (tx) => {
+      const grn = await PurchaseReconciliationService.getGoodsReceiptForInvoice(
+        tx,
+        input.goodsReceiptId,
+        ctx.organizationId,
+      );
+
+      if (grn.purchaseOrder && grn.purchaseOrder.supplierId !== input.supplierId) {
+        throw new ValidationError("Supplier does not match the linked purchase order");
+      }
+
+      const reconciliation = PurchaseReconciliationService.buildReconciliation(
+        grn.lines,
+        input.lines,
+      );
+
+      let subtotal = 0;
+      const lineData = input.lines.map((l) => {
+        const reconLine = reconciliation.lines.find(
+          (r) => r.goodsReceiptLineId === l.goodsReceiptLineId,
+        )!;
+        const tax = l.taxAmount ?? 0;
+        const total = lineTotal(l.quantity, l.unitCost, tax);
+        subtotal += l.quantity * l.unitCost;
+        taxAmount += tax;
+        return {
+          goodsReceiptLineId: l.goodsReceiptLineId,
+          variantId: l.variantId,
+          quantity: new Decimal(l.quantity),
+          grnUnitCost: new Decimal(reconLine.grnUnitCost),
+          unitCost: new Decimal(l.unitCost),
+          varianceAmount: new Decimal(reconLine.variance),
+          taxAmount: new Decimal(tax),
+          lineTotal: new Decimal(total),
+        };
+      });
+
+      const totalAmount = subtotal + taxAmount;
+
       const invoice = await tx.supplierInvoice.create({
         data: {
           organizationId: ctx.organizationId,
           supplierId: input.supplierId,
+          goodsReceiptId: input.goodsReceiptId,
+          purchaseOrderId: grn.purchaseOrderId,
           invoiceNumber,
           supplierRef: input.supplierRef,
           invoiceDate: input.invoiceDate,
           dueDate: input.dueDate,
           status: "APPROVED",
+          reconciliationStatus: reconciliation.reconciliationStatus,
+          grnSubtotal: new Decimal(reconciliation.grnSubtotal),
+          varianceAmount: new Decimal(reconciliation.varianceAmount),
           subtotal: new Decimal(subtotal),
           taxAmount: new Decimal(taxAmount),
           totalAmount: new Decimal(totalAmount),
@@ -406,8 +437,20 @@ export class PurchasingService {
           createdById: ctx.userId,
           lines: { create: lineData },
         },
-        include: { lines: true, supplier: true },
+        include: { lines: true, supplier: true, goodsReceipt: true },
       });
+
+      await PurchaseReconciliationService.reconcileInventoryCost(tx, {
+        goodsReceiptId: input.goodsReceiptId,
+        warehouseId: grn.warehouseId,
+        lines: reconciliation.lines,
+      });
+
+      await PurchaseReconciliationService.applyGrnInvoicingUpdates(
+        tx,
+        input.goodsReceiptId,
+        reconciliation,
+      );
 
       await AccountingEngine.postPurchaseInvoice(tx, {
         organizationId: ctx.organizationId,
@@ -418,6 +461,8 @@ export class PurchasingService {
         subtotal,
         taxAmount,
         totalAmount,
+        grnSubtotal: reconciliation.grnSubtotal,
+        varianceAmount: reconciliation.varianceAmount,
       });
 
       await SupplierLedgerService.addEntry(
@@ -439,7 +484,12 @@ export class PurchasingService {
         action: "purchasing.invoice.created",
         entityType: "SupplierInvoice",
         entityId: invoice.id,
-        after: { invoiceNumber, totalAmount },
+        after: {
+          invoiceNumber,
+          totalAmount,
+          goodsReceiptId: input.goodsReceiptId,
+          varianceAmount: reconciliation.varianceAmount,
+        },
       });
 
       return invoice;
