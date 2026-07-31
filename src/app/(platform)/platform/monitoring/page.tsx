@@ -1,7 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
-export default function PlatformMonitoringPage() {
+export default async function PlatformMonitoringPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.monitoring);
   return (
     <div className="space-y-6">
       <div>

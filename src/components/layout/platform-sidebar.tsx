@@ -27,7 +27,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { platformRoleCanAccess, PLATFORM_ROLES } from "@/platform/auth/platform-roles.shared";
+import {
+  platformRoleCanAccess,
+  PLATFORM_PAGE_ROLES,
+} from "@/platform/auth/platform-roles.shared";
 import type { PlatformUserRole } from "@prisma/client";
 
 const SIDEBAR_COLLAPSED_KEY = "platform-sidebar-icon-collapsed";
@@ -38,16 +41,16 @@ const navItems: {
   icon: typeof LayoutDashboard;
   roles: PlatformUserRole[];
 }[] = [
-  { href: "/platform", label: "Dashboard", icon: LayoutDashboard, roles: PLATFORM_ROLES.ALL },
-  { href: "/platform/organizations", label: "Organizations", icon: Building2, roles: PLATFORM_ROLES.ALL },
-  { href: "/platform/plans", label: "Plans", icon: CreditCard, roles: PLATFORM_ROLES.BILLING },
-  { href: "/platform/subscriptions", label: "Subscriptions", icon: Shield, roles: PLATFORM_ROLES.BILLING },
-  { href: "/platform/users", label: "Platform Users", icon: Users, roles: PLATFORM_ROLES.ADMIN },
-  { href: "/platform/support", label: "Support", icon: LifeBuoy, roles: PLATFORM_ROLES.ALL },
-  { href: "/platform/announcements", label: "Announcements", icon: Megaphone, roles: PLATFORM_ROLES.OPS },
-  { href: "/platform/feature-flags", label: "Feature Flags", icon: Flag, roles: PLATFORM_ROLES.ADMIN },
-  { href: "/platform/audit-logs", label: "Audit Logs", icon: ScrollText, roles: PLATFORM_ROLES.ALL },
-  { href: "/platform/monitoring", label: "Monitoring", icon: Server, roles: PLATFORM_ROLES.ALL },
+  { href: "/platform", label: "Dashboard", icon: LayoutDashboard, roles: [...PLATFORM_PAGE_ROLES.dashboard] },
+  { href: "/platform/organizations", label: "Organizations", icon: Building2, roles: [...PLATFORM_PAGE_ROLES.organizations] },
+  { href: "/platform/plans", label: "Plans", icon: CreditCard, roles: [...PLATFORM_PAGE_ROLES.plans] },
+  { href: "/platform/subscriptions", label: "Subscriptions", icon: Shield, roles: [...PLATFORM_PAGE_ROLES.subscriptions] },
+  { href: "/platform/users", label: "Platform Users", icon: Users, roles: [...PLATFORM_PAGE_ROLES.users] },
+  { href: "/platform/support", label: "Support", icon: LifeBuoy, roles: [...PLATFORM_PAGE_ROLES.support] },
+  { href: "/platform/announcements", label: "Announcements", icon: Megaphone, roles: [...PLATFORM_PAGE_ROLES.announcements] },
+  { href: "/platform/feature-flags", label: "Feature Flags", icon: Flag, roles: [...PLATFORM_PAGE_ROLES.featureFlags] },
+  { href: "/platform/audit-logs", label: "Audit Logs", icon: ScrollText, roles: [...PLATFORM_PAGE_ROLES.auditLogs] },
+  { href: "/platform/monitoring", label: "Monitoring", icon: Server, roles: [...PLATFORM_PAGE_ROLES.monitoring] },
 ];
 
 export function PlatformSidebar({

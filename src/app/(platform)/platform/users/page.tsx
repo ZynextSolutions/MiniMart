@@ -1,7 +1,12 @@
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { PlatformUsersManager } from "@/platform/admin/components/platform-users-manager";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformUsersPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.users);
   const users = await PlatformAdminService.listPlatformUsers();
   const serializedUsers = users.map((user) => ({
     ...user,

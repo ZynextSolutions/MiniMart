@@ -15,7 +15,10 @@ const PLATFORM_SUPPORT_EMAIL =
   process.env.PLATFORM_SUPPORT_EMAIL ?? "superadmin@platform.com";
 
 export default async function BillingSettingsPage() {
-  const session = await requireSession({ skipSubscriptionCheck: true });
+  const session = await requireSession({
+    skipSubscriptionCheck: true,
+    allowSuspendedOrg: true,
+  });
   await authorizeSession(session, PERMISSIONS.SETTINGS.COMPANY_VIEW);
 
   const [subscription, usage, enabledModules, availablePlans] = await Promise.all([

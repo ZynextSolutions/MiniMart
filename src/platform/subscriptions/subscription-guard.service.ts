@@ -49,10 +49,16 @@ export class SubscriptionGuardService {
 
   static async assertOrganizationAccess(
     organizationId: string,
-    options?: { skipSubscriptionCheck?: boolean },
+    options?: { skipSubscriptionCheck?: boolean; allowSuspendedOrg?: boolean },
   ): Promise<void> {
     const org = await this.getOrganizationStatus(organizationId);
-    if (!org || !this.isOrganizationAccessible(org.status, org.deletedAt)) {
+    if (!org || org.deletedAt) {
+      throw new Error("ORGANIZATION_SUSPENDED");
+    }
+    if (
+      !options?.allowSuspendedOrg &&
+      !this.isOrganizationAccessible(org.status, org.deletedAt)
+    ) {
       throw new Error("ORGANIZATION_SUSPENDED");
     }
     if (options?.skipSubscriptionCheck) return;

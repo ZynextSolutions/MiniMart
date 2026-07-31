@@ -54,13 +54,34 @@ const planSchema = z.object({
   sortOrder: z.coerce.number().int(),
 });
 
-const subscriptionUpdateSchema = z.object({
-  id: z.string().uuid(),
-  planId: z.string().uuid().optional(),
-  status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELLED"]).optional(),
-  trialEndsAt: z.string().optional().nullable(),
-  currentPeriodEnd: z.string().optional(),
-});
+const dateInputSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD date");
+
+const subscriptionUpdateSchema = z
+  .object({
+    id: z.string().uuid(),
+    planId: z.string().uuid().optional(),
+    status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELLED"]).optional(),
+    trialEndsAt: dateInputSchema.optional().nullable(),
+    currentPeriodStart: dateInputSchema.optional(),
+    currentPeriodEnd: dateInputSchema.optional(),
+  })
+  .refine(
+    (data) => {
+      if (!data.currentPeriodStart || !data.currentPeriodEnd) return true;
+      return data.currentPeriodEnd >= data.currentPeriodStart;
+    },
+    {
+      message: "Period end must be on or after period start",
+      path: ["currentPeriodEnd"],
+    },
+  );
+
+function parseDateInput(value: string): Date {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+}
 
 const platformUserSchema = z.object({
   id: z.string().uuid().optional(),
@@ -131,6 +152,9 @@ export async function updateOrganizationStatusAction(input: z.infer<typeof orgSt
       session.user.id,
     );
     revalidatePath("/platform/organizations");
+    revalidatePath(`/platform/organizations/${data.organizationId}`);
+    revalidatePath("/platform/subscriptions");
+    revalidatePath("/platform");
     return { success: true };
   } catch (error) {
     return { success: false, error: getErrorMessage(error) };
@@ -166,6 +190,8 @@ export async function deleteOrganizationAction(organizationId: string) {
     const session = await requirePlatformRole(...PLATFORM_ROLES.ADMIN);
     await PlatformAdminService.softDeleteOrganization(organizationId, session.user.id);
     revalidatePath("/platform/organizations");
+    revalidatePath("/platform/subscriptions");
+    revalidatePath("/platform");
     return { success: true };
   } catch (error) {
     return { success: false, error: getErrorMessage(error) };
@@ -249,18 +275,29 @@ export async function updateSubscriptionAction(input: z.infer<typeof subscriptio
   try {
     const session = await requirePlatformRole(...PLATFORM_ROLES.BILLING);
     const data = subscriptionUpdateSchema.parse(input);
-    await PlatformAdminService.updateSubscription(
+    const updated = await PlatformAdminService.updateSubscription(
       data.id,
       {
         planId: data.planId,
         status: data.status,
-        trialEndsAt: data.trialEndsAt ? new Date(data.trialEndsAt) : data.trialEndsAt === null ? null : undefined,
-        currentPeriodEnd: data.currentPeriodEnd ? new Date(data.currentPeriodEnd) : undefined,
+        trialEndsAt:
+          data.trialEndsAt === null
+            ? null
+            : data.trialEndsAt
+              ? parseDateInput(data.trialEndsAt)
+              : undefined,
+        currentPeriodStart: data.currentPeriodStart
+          ? parseDateInput(data.currentPeriodStart)
+          : undefined,
+        currentPeriodEnd: data.currentPeriodEnd
+          ? parseDateInput(data.currentPeriodEnd)
+          : undefined,
       },
       session.user.id,
     );
     revalidatePath("/platform/subscriptions");
     revalidatePath("/platform/organizations");
+    revalidatePath(`/platform/organizations/${updated.organization.id}`);
     return { success: true };
   } catch (error) {
     return { success: false, error: getErrorMessage(error) };

@@ -35,6 +35,7 @@ async function assertActiveUser(userId: string) {
 
 export async function requireSession(options?: {
   skipSubscriptionCheck?: boolean;
+  allowSuspendedOrg?: boolean;
 }): Promise<AuthSession> {
   const session = await auth();
   if (

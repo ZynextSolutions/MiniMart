@@ -7,7 +7,8 @@ import type {
   SupportTicketStatus,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors/app-error";
+import { wouldRemoveLastSuperAdmin } from "@/platform/auth/platform-roles.shared";
 
 export class PlatformAdminService {
   static async getDashboardStats() {
@@ -21,12 +22,21 @@ export class PlatformAdminService {
       openTickets,
     ] = await Promise.all([
       prisma.organization.count({ where: { deletedAt: null } }),
-      prisma.subscription.count({ where: { status: "TRIAL" } }),
-      prisma.subscription.count({ where: { status: "ACTIVE" } }),
-      prisma.organization.count({ where: { status: "SUSPENDED" } }),
+      prisma.subscription.count({
+        where: { status: "TRIAL", organization: { deletedAt: null } },
+      }),
+      prisma.subscription.count({
+        where: { status: "ACTIVE", organization: { deletedAt: null } },
+      }),
+      prisma.organization.count({
+        where: { status: "SUSPENDED", deletedAt: null },
+      }),
       prisma.user.count({ where: { deletedAt: null } }),
       prisma.supportTicket.count({
-        where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+        where: {
+          status: { in: ["OPEN", "IN_PROGRESS"] },
+          organization: { deletedAt: null },
+        },
       }),
     ]);
 
@@ -105,22 +115,54 @@ export class PlatformAdminService {
     actorId: string,
   ) {
     const prisma = getPrismaBase();
-    const before = await prisma.organization.findUnique({ where: { id } });
-    const updated = await prisma.organization.update({
+    const before = await prisma.organization.findUnique({
       where: { id },
-      data: { status },
+      include: { subscription: { select: { id: true, status: true } } },
     });
+    if (!before || before.deletedAt) {
+      throw new NotFoundError("Organization not found");
+    }
 
-    await prisma.platformAuditLog.create({
-      data: {
-        platformUserId: actorId,
-        action: "UPDATE_STATUS",
-        entityType: "Organization",
-        entityId: id,
-        organizationId: id,
-        before: before ? { status: before.status } : undefined,
-        after: { status },
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const org = await tx.organization.update({
+        where: { id },
+        data: { status },
+      });
+
+      if (
+        status === "CANCELLED" &&
+        before.subscription &&
+        before.subscription.status !== "CANCELLED"
+      ) {
+        await tx.subscription.update({
+          where: { id: before.subscription.id },
+          data: {
+            status: "CANCELLED",
+            cancelledAt: new Date(),
+          },
+        });
+        await tx.subscriptionEvent.create({
+          data: {
+            subscriptionId: before.subscription.id,
+            status: "CANCELLED",
+            note: "Organization cancelled by platform admin",
+          },
+        });
+      }
+
+      await tx.platformAuditLog.create({
+        data: {
+          platformUserId: actorId,
+          action: "UPDATE_STATUS",
+          entityType: "Organization",
+          entityId: id,
+          organizationId: id,
+          before: { status: before.status },
+          after: { status },
+        },
+      });
+
+      return org;
     });
 
     return updated;
@@ -191,15 +233,37 @@ export class PlatformAdminService {
     return result;
   }
 
+  /** Cancel non-cancelled subscriptions whose organization is soft-deleted. */
+  static async reconcileDeletedOrganizationSubscriptions() {
+    const prisma = getPrismaBase();
+    const result = await prisma.subscription.updateMany({
+      where: {
+        status: { not: "CANCELLED" },
+        organization: { deletedAt: { not: null } },
+      },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+      },
+    });
+    return result.count;
+  }
+
   static async listSubscriptions(params?: {
     status?: SubscriptionStatus;
     page?: number;
     limit?: number;
   }) {
     const prisma = getPrismaBase();
+    // Clean up any leftovers from older soft-deletes that skipped subscription cancel.
+    await this.reconcileDeletedOrganizationSubscriptions();
+
     const page = params?.page ?? 1;
     const limit = params?.limit ?? 20;
-    const where = params?.status ? { status: params.status } : {};
+    const where = {
+      organization: { deletedAt: null },
+      ...(params?.status ? { status: params.status } : {}),
+    };
 
     const [items, total] = await Promise.all([
       prisma.subscription.findMany({
@@ -337,22 +401,52 @@ export class PlatformAdminService {
 
   static async softDeleteOrganization(id: string, actorId: string) {
     const prisma = getPrismaBase();
-    const before = await prisma.organization.findUnique({ where: { id } });
+    const before = await prisma.organization.findUnique({
+      where: { id },
+      include: { subscription: { select: { id: true, status: true } } },
+    });
     if (!before || before.deletedAt) throw new NotFoundError("Organization not found");
 
-    const updated = await prisma.organization.update({
-      where: { id },
-      data: { deletedAt: new Date(), status: "CANCELLED" },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const org = await tx.organization.update({
+        where: { id },
+        data: { deletedAt: new Date(), status: "CANCELLED" },
+      });
 
-    await prisma.platformAuditLog.create({
-      data: {
-        platformUserId: actorId,
-        action: "DELETE",
-        entityType: "Organization",
-        entityId: id,
-        organizationId: id,
-      },
+      if (before.subscription && before.subscription.status !== "CANCELLED") {
+        await tx.subscription.update({
+          where: { id: before.subscription.id },
+          data: {
+            status: "CANCELLED",
+            cancelledAt: new Date(),
+          },
+        });
+        await tx.subscriptionEvent.create({
+          data: {
+            subscriptionId: before.subscription.id,
+            status: "CANCELLED",
+            note: "Organization soft-deleted by platform admin",
+          },
+        });
+      }
+
+      await tx.platformAuditLog.create({
+        data: {
+          platformUserId: actorId,
+          action: "DELETE",
+          entityType: "Organization",
+          entityId: id,
+          organizationId: id,
+          after: {
+            deletedAt: org.deletedAt?.toISOString() ?? null,
+            subscriptionCancelled: Boolean(
+              before.subscription && before.subscription.status !== "CANCELLED",
+            ),
+          },
+        },
+      });
+
+      return org;
     });
 
     return updated;
@@ -412,6 +506,7 @@ export class PlatformAdminService {
       planId?: string;
       status?: SubscriptionStatus;
       trialEndsAt?: Date | null;
+      currentPeriodStart?: Date;
       currentPeriodEnd?: Date;
     },
     actorId: string,
@@ -419,6 +514,12 @@ export class PlatformAdminService {
     const prisma = getPrismaBase();
     const before = await prisma.subscription.findUnique({ where: { id } });
     if (!before) throw new NotFoundError("Subscription not found");
+
+    const nextStart = data.currentPeriodStart ?? before.currentPeriodStart;
+    const nextEnd = data.currentPeriodEnd ?? before.currentPeriodEnd;
+    if (nextEnd.getTime() < nextStart.getTime()) {
+      throw new ValidationError("Period end must be on or after period start");
+    }
 
     const updated = await prisma.subscription.update({
       where: { id },
@@ -440,6 +541,18 @@ export class PlatformAdminService {
           note: "Updated by platform admin",
         },
       });
+    } else if (
+      data.currentPeriodStart ||
+      data.currentPeriodEnd ||
+      data.trialEndsAt !== undefined
+    ) {
+      await prisma.subscriptionEvent.create({
+        data: {
+          subscriptionId: id,
+          status: updated.status,
+          note: "Period dates updated by platform admin",
+        },
+      });
     }
 
     await prisma.platformAuditLog.create({
@@ -449,8 +562,23 @@ export class PlatformAdminService {
         entityType: "Subscription",
         entityId: id,
         organizationId: before.organizationId,
-        before: { planId: before.planId, status: before.status },
-        after: data,
+        before: {
+          planId: before.planId,
+          status: before.status,
+          currentPeriodStart: before.currentPeriodStart.toISOString(),
+          currentPeriodEnd: before.currentPeriodEnd.toISOString(),
+          trialEndsAt: before.trialEndsAt?.toISOString() ?? null,
+        },
+        after: {
+          planId: data.planId,
+          status: data.status,
+          currentPeriodStart: data.currentPeriodStart?.toISOString(),
+          currentPeriodEnd: data.currentPeriodEnd?.toISOString(),
+          trialEndsAt:
+            data.trialEndsAt === undefined
+              ? undefined
+              : data.trialEndsAt?.toISOString() ?? null,
+        },
       },
     });
 
@@ -519,6 +647,21 @@ export class PlatformAdminService {
     const prisma = getPrismaBase();
     const before = await prisma.platformUser.findUnique({ where: { id } });
     if (!before) throw new NotFoundError("Platform user not found");
+
+    if (data.role !== undefined || data.isActive !== undefined) {
+      const activeAdmins = await prisma.platformUser.count({
+        where: { isActive: true, role: "SUPER_ADMIN" },
+      });
+      if (
+        wouldRemoveLastSuperAdmin(
+          { role: before.role, isActive: before.isActive },
+          { role: data.role, isActive: data.isActive },
+          activeAdmins,
+        )
+      ) {
+        throw new ConflictError("Cannot demote or deactivate the last active super admin");
+      }
+    }
 
     const payload: {
       firstName?: string;

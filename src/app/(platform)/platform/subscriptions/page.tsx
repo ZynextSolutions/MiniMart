@@ -1,7 +1,12 @@
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { SubscriptionsManager } from "@/platform/admin/components/subscriptions-manager";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformSubscriptionsPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.subscriptions);
   const [data, plans] = await Promise.all([
     PlatformAdminService.listSubscriptions(),
     PlatformAdminService.listPlans(),
@@ -10,6 +15,7 @@ export default async function PlatformSubscriptionsPage() {
   const serializedSubscriptions = data.items.map((sub) => ({
     id: sub.id,
     status: sub.status,
+    currentPeriodStart: sub.currentPeriodStart.toISOString(),
     currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
     trialEndsAt: sub.trialEndsAt?.toISOString() ?? null,
     organization: sub.organization,

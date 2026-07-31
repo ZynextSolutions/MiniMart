@@ -2,12 +2,20 @@ import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { OrganizationsTable } from "@/platform/admin/components/organizations-table";
 import { CreateOrganizationForm } from "@/platform/admin/components/create-organization-form";
 import { serializeOrganizationListItem } from "@/lib/utils/serialize-prisma";
+import {
+  PLATFORM_PAGE_ROLES,
+  PLATFORM_ROLES,
+  platformRoleCanAccess,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformOrganizationsPage({
   searchParams,
 }: {
   searchParams: Promise<{ search?: string; status?: string }>;
 }) {
+  const session = await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.organizations);
+  const canCreate = platformRoleCanAccess(session.user.platformRole, PLATFORM_ROLES.OPS);
   const params = await searchParams;
   const [data, plans] = await Promise.all([
     PlatformAdminService.listOrganizations({
@@ -33,7 +41,7 @@ export default async function PlatformOrganizationsPage({
           <h1 className="text-2xl font-bold tracking-tight">Organizations</h1>
           <p className="text-muted-foreground">Manage tenant organizations.</p>
         </div>
-        <CreateOrganizationForm plans={planOptions} />
+        {canCreate ? <CreateOrganizationForm plans={planOptions} /> : null}
       </div>
       <OrganizationsTable data={serializedData} />
     </div>

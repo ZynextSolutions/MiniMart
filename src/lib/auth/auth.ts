@@ -106,8 +106,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           token.organizationName = organization.name;
           token.organizationSlug = organization.slug;
           token.organizationStatus = organization.status;
-          if (organization.deletedAt || organization.status === "SUSPENDED" || organization.status === "CANCELLED") {
-            token.error = "OrganizationSuspended";
+          // Soft-deleted orgs hard-lock the session. Suspended/cancelled keep a
+          // session so middleware can route to /suspended and billing recovery.
+          if (organization.deletedAt) {
+            token.error = "OrganizationDeleted";
           } else {
             delete token.error;
           }
@@ -195,7 +197,9 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         }
 
         const org = user.organization;
-        if (org.deletedAt || org.status === "SUSPENDED" || org.status === "CANCELLED") {
+        // Soft-deleted orgs cannot sign in. Suspended/cancelled may sign in so
+        // they can reach the status page and billing recovery.
+        if (org.deletedAt) {
           return null;
         }
 

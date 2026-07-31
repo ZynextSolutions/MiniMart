@@ -7,8 +7,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformAuditLogsPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.auditLogs);
   const data = await PlatformAdminService.listAuditLogs();
 
   return (

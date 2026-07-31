@@ -29,10 +29,12 @@ export function OrgModulesManager({
   organizationId,
   planName,
   modules,
+  canManage = false,
 }: {
   organizationId: string;
   planName: string;
   modules: OrgModuleRow[];
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -86,22 +88,32 @@ export function OrgModulesManager({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Select
-                      value={row.override}
-                      disabled={savingKey === row.key}
-                      onValueChange={(value) =>
-                        handleChange(row.key, value as ModuleOverrideState)
-                      }
-                    >
-                      <SelectTrigger className="w-36">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inherit">Inherit plan</SelectItem>
-                        <SelectItem value="enabled">Force enable</SelectItem>
-                        <SelectItem value="disabled">Force disable</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {canManage ? (
+                      <Select
+                        value={row.override}
+                        disabled={savingKey === row.key}
+                        onValueChange={(value) =>
+                          handleChange(row.key, value as ModuleOverrideState)
+                        }
+                      >
+                        <SelectTrigger className="w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">Inherit plan</SelectItem>
+                          <SelectItem value="enabled">Force enable</SelectItem>
+                          <SelectItem value="disabled">Force disable</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {row.override === "inherit"
+                          ? "Inherit plan"
+                          : row.override === "enabled"
+                            ? "Force enable"
+                            : "Force disable"}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={row.effective ? "default" : "outline"}>

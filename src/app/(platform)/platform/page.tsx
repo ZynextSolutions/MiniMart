@@ -1,7 +1,12 @@
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformDashboardPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.dashboard);
   const stats = await PlatformAdminService.getDashboardStats();
 
   const cards = [

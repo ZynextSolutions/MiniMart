@@ -1,8 +1,13 @@
 import { FeatureFlagService } from "@/platform/feature-flags/feature-flag.service";
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { FeatureFlagsManager } from "@/platform/admin/components/feature-flags-manager";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformFeatureFlagsPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.featureFlags);
   const [flags, organizations] = await Promise.all([
     FeatureFlagService.listAll(),
     PlatformAdminService.listOrganizationOptions(),

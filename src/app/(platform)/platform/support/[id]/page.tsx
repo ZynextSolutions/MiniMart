@@ -1,12 +1,17 @@
 import { notFound } from "next/navigation";
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { SupportTicketDetail } from "@/platform/admin/components/support-ticket-detail";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function SupportTicketDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.support);
   const { id } = await params;
   const ticket = await PlatformAdminService.getSupportTicket(id);
   if (!ticket) notFound();

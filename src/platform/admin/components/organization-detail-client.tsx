@@ -49,9 +49,15 @@ type OrgDetail = {
 export function OrganizationDetailClient({
   org,
   plans,
+  canManageOrg = false,
+  canDelete = false,
+  canManageSubscription = false,
 }: {
   org: OrgDetail;
   plans: PlanOption[];
+  canManageOrg?: boolean;
+  canDelete?: boolean;
+  canManageSubscription?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -94,12 +100,21 @@ export function OrganizationDetailClient({
     }
   }
 
-  async function handleSubscriptionUpdate(data: { planId?: string; status?: string }) {
+  async function handleSubscriptionUpdate(data: {
+    planId?: string;
+    status?: string;
+    currentPeriodStart?: string;
+    currentPeriodEnd?: string;
+    trialEndsAt?: string | null;
+  }) {
     if (!org.subscription) return;
     const result = await updateSubscriptionAction({
       id: org.subscription.id,
       planId: data.planId,
       status: data.status as "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELLED" | undefined,
+      currentPeriodStart: data.currentPeriodStart,
+      currentPeriodEnd: data.currentPeriodEnd,
+      trialEndsAt: data.trialEndsAt,
     });
     if (result.success) {
       toast.success("Subscription updated");
@@ -107,6 +122,27 @@ export function OrganizationDetailClient({
     } else {
       toast.error(result.error);
     }
+  }
+
+  async function handlePeriodSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!org.subscription) return;
+    setSaving(true);
+    const form = new FormData(e.currentTarget);
+    const currentPeriodStart = String(form.get("currentPeriodStart") || "");
+    const currentPeriodEnd = String(form.get("currentPeriodEnd") || "");
+    const trialEndsRaw = String(form.get("trialEndsAt") || "");
+    await handleSubscriptionUpdate({
+      currentPeriodStart,
+      currentPeriodEnd,
+      trialEndsAt: trialEndsRaw ? trialEndsRaw : null,
+    });
+    setSaving(false);
+  }
+
+  function toDateInputValue(iso: string | null | undefined): string {
+    if (!iso) return "";
+    return iso.slice(0, 10);
   }
 
   async function handleDelete() {
@@ -129,12 +165,16 @@ export function OrganizationDetailClient({
           <p className="text-muted-foreground">/{org.slug}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setEditing(!editing)}>
-            {editing ? "Cancel" : "Edit"}
-          </Button>
-          <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
-            Delete
-          </Button>
+          {canManageOrg ? (
+            <Button variant="outline" onClick={() => setEditing(!editing)}>
+              {editing ? "Cancel" : "Edit"}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
+              Delete
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -144,15 +184,19 @@ export function OrganizationDetailClient({
             <CardTitle className="text-sm text-muted-foreground">Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <Select value={org.status} onValueChange={(v) => handleStatusChange(v as "ACTIVE" | "TRIAL" | "SUSPENDED" | "CANCELLED")}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">Active</SelectItem>
-                <SelectItem value="TRIAL">Trial</SelectItem>
-                <SelectItem value="SUSPENDED">Suspended</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
+            {canManageOrg ? (
+              <Select value={org.status} onValueChange={(v) => handleStatusChange(v as "ACTIVE" | "TRIAL" | "SUSPENDED" | "CANCELLED")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="TRIAL">Trial</SelectItem>
+                  <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="text-sm font-medium">{org.status}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -221,38 +265,95 @@ export function OrganizationDetailClient({
             <div className="flex flex-wrap gap-4">
               <div className="space-y-2">
                 <Label>Plan</Label>
-                <Select
-                  value={org.subscription.plan.id}
-                  onValueChange={(planId) => handleSubscriptionUpdate({ planId })}
-                >
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {plans.map((plan) => (
-                      <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {canManageSubscription ? (
+                  <Select
+                    value={org.subscription.plan.id}
+                    onValueChange={(planId) => handleSubscriptionUpdate({ planId })}
+                  >
+                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {plans.map((plan) => (
+                        <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-sm font-medium">{org.subscription.plan.name}</div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select
-                  value={org.subscription.status}
-                  onValueChange={(status) => handleSubscriptionUpdate({ status })}
-                >
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TRIAL">Trial</SelectItem>
-                    <SelectItem value="ACTIVE">Active</SelectItem>
-                    <SelectItem value="PAST_DUE">Past Due</SelectItem>
-                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+                {canManageSubscription ? (
+                  <Select
+                    value={org.subscription.status}
+                    onValueChange={(status) => handleSubscriptionUpdate({ status })}
+                  >
+                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TRIAL">Trial</SelectItem>
+                      <SelectItem value="ACTIVE">Active</SelectItem>
+                      <SelectItem value="PAST_DUE">Past Due</SelectItem>
+                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-sm font-medium">{org.subscription.status}</div>
+                )}
               </div>
             </div>
-            <div className="text-sm text-muted-foreground">
-              Period: {new Date(org.subscription.currentPeriodStart).toLocaleDateString()} –{" "}
-              {new Date(org.subscription.currentPeriodEnd).toLocaleDateString()}
-            </div>
+            {canManageSubscription ? (
+              <form onSubmit={handlePeriodSave} className="space-y-4 border-t pt-4">
+                <h4 className="text-sm font-medium">Billing period</h4>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="currentPeriodStart">Period start</Label>
+                    <Input
+                      id="currentPeriodStart"
+                      name="currentPeriodStart"
+                      type="date"
+                      required
+                      defaultValue={toDateInputValue(org.subscription.currentPeriodStart)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="currentPeriodEnd">Period end</Label>
+                    <Input
+                      id="currentPeriodEnd"
+                      name="currentPeriodEnd"
+                      type="date"
+                      required
+                      defaultValue={toDateInputValue(org.subscription.currentPeriodEnd)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="trialEndsAt">Trial ends</Label>
+                    <Input
+                      id="trialEndsAt"
+                      name="trialEndsAt"
+                      type="date"
+                      defaultValue={toDateInputValue(org.subscription.trialEndsAt)}
+                    />
+                  </div>
+                </div>
+                <Button type="submit" size="sm" disabled={saving}>
+                  {saving ? "Saving..." : "Save period dates"}
+                </Button>
+              </form>
+            ) : (
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <div>
+                  Period:{" "}
+                  {new Date(org.subscription.currentPeriodStart).toLocaleDateString()} –{" "}
+                  {new Date(org.subscription.currentPeriodEnd).toLocaleDateString()}
+                </div>
+                {org.subscription.trialEndsAt ? (
+                  <div>
+                    Trial ends:{" "}
+                    {new Date(org.subscription.trialEndsAt).toLocaleDateString()}
+                  </div>
+                ) : null}
+              </div>
+            )}
             {org.subscription.events.length > 0 && (
               <div className="space-y-2 border-t pt-4">
                 <h4 className="text-sm font-medium">Recent events</h4>

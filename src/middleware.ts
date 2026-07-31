@@ -61,14 +61,19 @@ export default auth((req) => {
 
   if (isLoggedIn && (sessionType === "organization" || !sessionType)) {
     const orgStatus = session?.user?.organizationStatus;
+    const allowedWhenSuspended =
+      pathname === "/suspended" || pathname.startsWith("/settings/billing");
     if (
       (orgStatus === "SUSPENDED" || orgStatus === "CANCELLED") &&
-      pathname !== "/suspended"
+      !allowedWhenSuspended
     ) {
       return NextResponse.redirect(new URL("/suspended", req.nextUrl.origin));
     }
 
     if (pathname === "/login") {
+      if (orgStatus === "SUSPENDED" || orgStatus === "CANCELLED") {
+        return NextResponse.redirect(new URL("/suspended", req.nextUrl.origin));
+      }
       return NextResponse.redirect(new URL("/", req.nextUrl.origin));
     }
   }

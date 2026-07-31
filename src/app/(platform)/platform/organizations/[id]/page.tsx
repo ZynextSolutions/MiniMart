@@ -3,12 +3,25 @@ import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { OrganizationDetailClient } from "@/platform/admin/components/organization-detail-client";
 import { OrgModulesManager } from "@/platform/admin/components/org-modules-manager";
 import { ModuleAccessService } from "@/platform/modules/module-access.service";
+import {
+  PLATFORM_PAGE_ROLES,
+  PLATFORM_ROLES,
+  platformRoleCanAccess,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function OrganizationDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.organizations);
+  const role = session.user.platformRole;
+  const canManageOrg = platformRoleCanAccess(role, PLATFORM_ROLES.OPS);
+  const canDelete = platformRoleCanAccess(role, PLATFORM_ROLES.ADMIN);
+  const canManageSubscription = platformRoleCanAccess(role, PLATFORM_ROLES.BILLING);
+  const canManageModules = platformRoleCanAccess(role, PLATFORM_ROLES.ADMIN);
+
   const { id } = await params;
   const [org, plans, moduleRows] = await Promise.all([
     PlatformAdminService.getOrganization(id),
@@ -51,11 +64,18 @@ export default async function OrganizationDetailPage({
 
   return (
     <div className="space-y-6">
-      <OrganizationDetailClient org={serializedOrg} plans={planOptions} />
+      <OrganizationDetailClient
+        org={serializedOrg}
+        plans={planOptions}
+        canManageOrg={canManageOrg}
+        canDelete={canDelete}
+        canManageSubscription={canManageSubscription}
+      />
       <OrgModulesManager
         organizationId={org.id}
         planName={org.subscription?.plan.name ?? "No plan"}
         modules={moduleRows}
+        canManage={canManageModules}
       />
     </div>
   );

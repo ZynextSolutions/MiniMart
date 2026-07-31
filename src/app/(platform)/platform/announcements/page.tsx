@@ -1,7 +1,12 @@
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { AnnouncementsManager } from "@/platform/admin/components/announcements-manager";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformAnnouncementsPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.announcements);
   const [announcements, organizations] = await Promise.all([
     PlatformAdminService.listAnnouncements(),
     PlatformAdminService.listOrganizationOptions(),

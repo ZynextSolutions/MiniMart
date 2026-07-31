@@ -1,8 +1,13 @@
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { PlansManager } from "@/platform/admin/components/plans-manager";
 import { serializePlan } from "@/lib/utils/serialize-prisma";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformPlansPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.plans);
   const plans = await PlatformAdminService.listPlans();
   const serializedPlans = plans.map(serializePlan);
   return (

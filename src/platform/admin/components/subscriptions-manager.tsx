@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { updateSubscriptionAction } from "@/platform/admin/platform.actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -29,11 +30,17 @@ type PlanOption = { id: string; name: string; slug: string };
 type Subscription = {
   id: string;
   status: string;
+  currentPeriodStart: string;
   currentPeriodEnd: string;
   trialEndsAt: string | null;
   organization: { id: string; name: string; slug: string };
   plan: { name: string };
 };
+
+function toDateInputValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
 
 export function SubscriptionsManager({
   subscriptions,
@@ -48,13 +55,22 @@ export function SubscriptionsManager({
 
   async function handleUpdate(
     id: string,
-    data: { planId?: string; status?: string },
+    data: {
+      planId?: string;
+      status?: string;
+      currentPeriodStart?: string;
+      currentPeriodEnd?: string;
+      trialEndsAt?: string | null;
+    },
   ) {
     setSaving(true);
     const result = await updateSubscriptionAction({
       id,
       planId: data.planId,
       status: data.status as "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELLED" | undefined,
+      currentPeriodStart: data.currentPeriodStart,
+      currentPeriodEnd: data.currentPeriodEnd,
+      trialEndsAt: data.trialEndsAt,
     });
     setSaving(false);
     if (result.success) {
@@ -66,6 +82,22 @@ export function SubscriptionsManager({
     }
   }
 
+  async function handlePeriodSave(
+    e: React.FormEvent<HTMLFormElement>,
+    sub: Subscription,
+  ) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const currentPeriodStart = String(form.get("currentPeriodStart") || "");
+    const currentPeriodEnd = String(form.get("currentPeriodEnd") || "");
+    const trialEndsRaw = String(form.get("trialEndsAt") || "");
+    await handleUpdate(sub.id, {
+      currentPeriodStart,
+      currentPeriodEnd,
+      trialEndsAt: trialEndsRaw ? trialEndsRaw : null,
+    });
+  }
+
   return (
     <div className="rounded-md border">
       <Table>
@@ -74,13 +106,13 @@ export function SubscriptionsManager({
             <TableHead>Organization</TableHead>
             <TableHead>Plan</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Period End</TableHead>
+            <TableHead>Period</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
           {subscriptions.map((sub) => (
-            <TableRow key={sub.id}>
+            <TableRow key={sub.id} className="align-top">
               <TableCell>
                 <Link
                   href={`/platform/organizations/${sub.organization.id}`}
@@ -126,7 +158,59 @@ export function SubscriptionsManager({
                   <Badge>{sub.status}</Badge>
                 )}
               </TableCell>
-              <TableCell>{new Date(sub.currentPeriodEnd).toLocaleDateString()}</TableCell>
+              <TableCell>
+                {editingId === sub.id ? (
+                  <form
+                    onSubmit={(e) => handlePeriodSave(e, sub)}
+                    className="grid min-w-[16rem] gap-2"
+                  >
+                    <div className="space-y-1">
+                      <Label className="text-xs">Start</Label>
+                      <Input
+                        name="currentPeriodStart"
+                        type="date"
+                        required
+                        defaultValue={toDateInputValue(sub.currentPeriodStart)}
+                        disabled={saving}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">End</Label>
+                      <Input
+                        name="currentPeriodEnd"
+                        type="date"
+                        required
+                        defaultValue={toDateInputValue(sub.currentPeriodEnd)}
+                        disabled={saving}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Trial ends</Label>
+                      <Input
+                        name="trialEndsAt"
+                        type="date"
+                        defaultValue={toDateInputValue(sub.trialEndsAt)}
+                        disabled={saving}
+                      />
+                    </div>
+                    <Button type="submit" size="sm" disabled={saving}>
+                      {saving ? "Saving..." : "Save dates"}
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="text-sm">
+                    <div>
+                      {new Date(sub.currentPeriodStart).toLocaleDateString()} –{" "}
+                      {new Date(sub.currentPeriodEnd).toLocaleDateString()}
+                    </div>
+                    {sub.trialEndsAt ? (
+                      <div className="text-muted-foreground">
+                        Trial: {new Date(sub.trialEndsAt).toLocaleDateString()}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </TableCell>
               <TableCell>
                 <Button
                   size="sm"

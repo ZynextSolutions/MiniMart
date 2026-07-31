@@ -1,7 +1,12 @@
 import { PlatformAdminService } from "@/platform/admin/platform-admin.service";
 import { SupportTicketsManager } from "@/platform/admin/components/support-tickets-manager";
+import {
+  PLATFORM_PAGE_ROLES,
+  requirePlatformPageAccess,
+} from "@/platform/auth/platform-roles";
 
 export default async function PlatformSupportPage() {
+  await requirePlatformPageAccess(...PLATFORM_PAGE_ROLES.support);
   const [data, organizations] = await Promise.all([
     PlatformAdminService.listSupportTickets(),
     PlatformAdminService.listOrganizationOptions(),
