@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireSession, authorizeSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ProductService } from "@/features/products/services/product.service";
+import { ProductImportService } from "@/features/products/services/product-import.service";
+import type { ProductImportResult } from "@/features/products/lib/product-import";
 import { BarcodeService } from "@/lib/services/barcode-service";
 import { getErrorMessage } from "@/lib/errors/app-error";
 
@@ -73,6 +75,41 @@ export async function createProductAction(input: z.infer<typeof createSchema>) {
     );
     revalidatePath("/products");
     return { success: true, productId: product.id };
+  } catch (e) {
+    return { success: false, error: getErrorMessage(e) };
+  }
+}
+
+export async function importProductsAction(
+  formData: FormData,
+): Promise<{ success: true; result: ProductImportResult } | { success: false; error: string }> {
+  try {
+    const session = await requireSession();
+    await authorizeSession(session, PERMISSIONS.PRODUCTS.CREATE);
+
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return { success: false, error: "Please select a CSV or Excel file" };
+    }
+
+    if (file.size === 0) {
+      return { success: false, error: "The selected file is empty" };
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: "File is too large (max 5 MB)" };
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const parsedRows = await ProductImportService.parseFile(file.name, buffer);
+    const result = await ProductImportService.importRows(
+      session.user.organizationId,
+      session.user.id,
+      parsedRows,
+    );
+
+    revalidatePath("/products");
+    return { success: true, result };
   } catch (e) {
     return { success: false, error: getErrorMessage(e) };
   }
