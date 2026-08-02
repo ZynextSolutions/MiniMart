@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -136,13 +136,16 @@ export function ProductForm({
     form.setValue("barcode", result.code);
   }
 
-  function handleBarcodeScanned(code: string) {
-    form.setValue("barcode", code, { shouldDirty: true, shouldValidate: true });
-    if (!form.getValues("sku")) {
-      form.setValue("sku", code, { shouldDirty: true, shouldValidate: true });
-    }
-    toast.success("Barcode scanned");
-  }
+  const handleBarcodeScanned = useCallback(
+    (code: string) => {
+      form.setValue("barcode", code, { shouldDirty: true, shouldValidate: true });
+      if (!form.getValues("sku")) {
+        form.setValue("sku", code, { shouldDirty: true, shouldValidate: true });
+      }
+      toast.success("Barcode scanned");
+    },
+    [form],
+  );
 
   async function onSubmit(values: FormValues) {
     setLoading(true);

@@ -78,7 +78,7 @@ export function PosTerminal({
     [addItem],
   );
 
-  useBarcodeScanner({ onScan: handleBarcode, enabled: !!sessionId });
+  useBarcodeScanner({ onScan: handleBarcode, enabled: !!sessionId && !scannerOpen });
 
   useEffect(() => {
     setTaxMode(taxMode);
