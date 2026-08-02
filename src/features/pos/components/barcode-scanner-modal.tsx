@@ -15,12 +15,31 @@ interface BarcodeScannerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onScan: (code: string) => void;
+  /** Keep camera open and accept repeated scans (POS). Default false. */
+  continuous?: boolean;
 }
 
 type CameraOption = {
   id: string;
   label: string;
 };
+
+type FacingMode = "environment" | "user";
+
+type StartTarget =
+  | { kind: "device"; deviceId: string }
+  | { kind: "facing"; facingMode: FacingMode };
+
+const SCAN_COOLDOWN_MS = 1600;
+const SAME_CODE_COOLDOWN_MS = 2500;
+
+function isAppleMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  const iOS = /iPhone|iPad|iPod/i.test(ua);
+  const iPadOs = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  return iOS || iPadOs;
+}
 
 function formatCameraError(error: unknown): string {
   if (typeof window !== "undefined" && !window.isSecureContext) {
@@ -63,10 +82,16 @@ function errorTips(message: string): string {
   return "You can also scan from a photo if the camera is unavailable.";
 }
 
-function pickPreferredCameraId(cameras: CameraOption[]): string | null {
+function pickPreferredCameraId(cameras: CameraOption[], facing: FacingMode): string | null {
   if (cameras.length === 0) return null;
-  const preferred = cameras.find((camera) => /back|rear|environment/i.test(camera.label));
-  return preferred?.id ?? cameras[0].id;
+  if (facing === "environment") {
+    const rear = cameras.find((camera) => /back|rear|environment|world/i.test(camera.label));
+    if (rear) return rear.id;
+  } else {
+    const front = cameras.find((camera) => /front|user|face|selfie/i.test(camera.label));
+    if (front) return front.id;
+  }
+  return cameras[0]?.id ?? null;
 }
 
 async function waitForLayout(): Promise<void> {
@@ -77,7 +102,32 @@ async function waitForLayout(): Promise<void> {
   });
 }
 
-export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScannerModalProps) {
+function patchVideoElement(root: HTMLElement | null) {
+  const video = root?.querySelector("video");
+  if (!video) return;
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
+  video.muted = true;
+  video.playsInline = true;
+}
+
+async function applyFocusBoost(instance: Html5QrcodeType) {
+  try {
+    await instance.applyVideoConstraints({
+      // Safari / Chromium advanced constraint — ignored when unsupported.
+      advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+    });
+  } catch {
+    // Optional capability.
+  }
+}
+
+export function BarcodeScannerModal({
+  open,
+  onOpenChange,
+  onScan,
+  continuous = false,
+}: BarcodeScannerModalProps) {
   const scannerElementId = useId().replace(/:/g, "");
   const scannerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +137,10 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
   const startingLockRef = useRef(false);
   const onScanRef = useRef(onScan);
   const onOpenChangeRef = useRef(onOpenChange);
+  const continuousRef = useRef(continuous);
+  const lastScanRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
   const preferredCameraIdRef = useRef<string | null>(null);
+  const facingModeRef = useRef<FacingMode>("environment");
 
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -95,18 +148,25 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
   const [scanningFile, setScanningFile] = useState(false);
   const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [cameraIndex, setCameraIndex] = useState(0);
+  const [facingMode, setFacingMode] = useState<FacingMode>("environment");
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
 
   onScanRef.current = onScan;
   onOpenChangeRef.current = onOpenChange;
+  continuousRef.current = continuous;
 
   const resetControls = useCallback(() => {
     setCameras([]);
     setCameraIndex(0);
     setTorchSupported(false);
     setTorchOn(false);
+    setLastScanned(null);
     preferredCameraIdRef.current = null;
+    facingModeRef.current = "environment";
+    setFacingMode("environment");
+    lastScanRef.current = { code: "", at: 0 };
   }, []);
 
   const stopScanner = useCallback(async () => {
@@ -144,10 +204,23 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
           : -1;
         const resolvedIndex = index >= 0 ? index : 0;
         setCameraIndex(resolvedIndex);
-        preferredCameraIdRef.current = options[resolvedIndex]?.id ?? null;
+        if (currentId && index >= 0) {
+          preferredCameraIdRef.current = options[resolvedIndex]?.id ?? null;
+        }
       }
     } catch {
       // Enumeration is best-effort after permission is granted.
+    }
+
+    try {
+      const settings = instance.getRunningTrackSettings();
+      const facing = settings.facingMode;
+      if (facing === "user" || facing === "environment") {
+        facingModeRef.current = facing;
+        setFacingMode(facing);
+      }
+    } catch {
+      // Optional.
     }
 
     try {
@@ -164,7 +237,21 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
   const handleDecoded = useCallback(
     async (decoded: string) => {
       const code = decoded.trim();
-      if (!code || scanHandledRef.current) return;
+      if (!code) return;
+
+      if (continuousRef.current) {
+        const now = Date.now();
+        const last = lastScanRef.current;
+        if (now - last.at < SCAN_COOLDOWN_MS) return;
+        if (code === last.code && now - last.at < SAME_CODE_COOLDOWN_MS) return;
+
+        lastScanRef.current = { code, at: now };
+        setLastScanned(code);
+        onScanRef.current(code);
+        return;
+      }
+
+      if (scanHandledRef.current) return;
       scanHandledRef.current = true;
       await stopScanner();
       onScanRef.current(code);
@@ -173,8 +260,34 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
     [stopScanner],
   );
 
+  const buildScanConfig = useCallback((facing: FacingMode) => {
+    const apple = isAppleMobile();
+
+    return {
+      fps: apple ? 12 : 10,
+      disableFlip: false,
+      // Responsive box avoids iOS "qrbox larger than element" failures.
+      qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+        const width = Math.floor(Math.min(viewfinderWidth * 0.86, apple ? 300 : 320));
+        const height = Math.floor(Math.min(viewfinderHeight * 0.42, apple ? 140 : 170));
+        return {
+          width: Math.max(180, width),
+          height: Math.max(100, height),
+        };
+      },
+      // aspectRatio breaks camera init on many iPhones — omit on Apple.
+      ...(apple ? {} : { aspectRatio: 1.777778 }),
+      videoConstraints: {
+        facingMode: facing,
+        width: { ideal: apple ? 1280 : 1280 },
+        height: { ideal: apple ? 720 : 720 },
+        ...(apple ? {} : { frameRate: { ideal: 15 } }),
+      },
+    };
+  }, []);
+
   const startScanner = useCallback(
-    async (cameraIdOverride?: string) => {
+    async (target?: StartTarget) => {
       if (startingLockRef.current) return;
       startingLockRef.current = true;
 
@@ -186,7 +299,6 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
 
       try {
         await stopScanner();
-        // Allow React to paint the in-flow preview before getUserMedia.
         await waitForLayout();
 
         if (token !== startTokenRef.current) return;
@@ -195,6 +307,18 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
         }
 
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        const apple = isAppleMobile();
+
+        if (target?.kind === "device") {
+          preferredCameraIdRef.current = target.deviceId;
+        } else if (target?.kind === "facing") {
+          facingModeRef.current = target.facingMode;
+          setFacingMode(target.facingMode);
+          preferredCameraIdRef.current = null;
+        }
+
+        const facing = facingModeRef.current;
+        const config = buildScanConfig(facing);
 
         const createScanner = () =>
           new Html5Qrcode(scannerElementId, {
@@ -208,22 +332,30 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
               Html5QrcodeSupportedFormats.UPC_A,
               Html5QrcodeSupportedFormats.UPC_E,
             ],
+            // Native detector helps Android; ZXing fallback still used when missing (older iOS).
             useBarCodeDetectorIfSupported: true,
           });
 
-        const config = { fps: 10, qrbox: { width: 280, height: 160 }, aspectRatio: 1.777778 };
         const onSuccess = (decoded: string) => {
           void handleDecoded(decoded);
         };
 
         const candidates: Array<string | MediaTrackConstraints> = [];
-        if (cameraIdOverride) {
-          preferredCameraIdRef.current = cameraIdOverride;
-          candidates.push(cameraIdOverride);
+
+        if (target?.kind === "device") {
+          candidates.push(target.deviceId);
         } else if (preferredCameraIdRef.current) {
           candidates.push(preferredCameraIdRef.current);
-        } else {
-          candidates.push({ facingMode: { ideal: "environment" } });
+        }
+
+        // Facing-mode candidates — critical for iPhone + Android tablets with weak device labels.
+        candidates.push(
+          { facingMode: { ideal: facing } },
+          { facingMode: facing },
+        );
+
+        if (facing === "environment") {
+          candidates.push({ facingMode: { exact: "environment" } });
         }
 
         let lastError: unknown;
@@ -236,14 +368,20 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
           instanceRef.current = scanner;
 
           try {
-            await scanner.start(candidate, config, onSuccess, () => {});
+            // When using facing constraints, also pass videoConstraints for focus/resolution.
+            const startConfig =
+              typeof candidate === "string"
+                ? { fps: config.fps, qrbox: config.qrbox, ...(apple ? {} : { aspectRatio: config.aspectRatio }) }
+                : config;
+
+            await scanner.start(candidate, startConfig, onSuccess, () => {});
             started = true;
             if (typeof candidate === "string") {
               preferredCameraIdRef.current = candidate;
             }
             break;
-          } catch (error) {
-            lastError = error;
+          } catch (err) {
+            lastError = err;
             instanceRef.current = null;
             if (scanner.isScanning) {
               await scanner.stop().catch(() => {});
@@ -256,27 +394,56 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
           }
         }
 
-        // If facingMode failed, try an enumerated device id once.
-        if (!started && !cameraIdOverride) {
+        // Enumerate devices and retry with preferred id (labels appear after permission).
+        if (!started) {
           try {
-            const { Html5Qrcode } = await import("html5-qrcode");
             const devices = await Html5Qrcode.getCameras();
-            const fallbackId = pickPreferredCameraId(
-              devices.map((device, index) => ({
-                id: device.id,
-                label: device.label || `Camera ${index + 1}`,
-              })),
-            );
+            const options = devices.map((device, index) => ({
+              id: device.id,
+              label: device.label || `Camera ${index + 1}`,
+            }));
+            setCameras(options);
+            const fallbackId = pickPreferredCameraId(options, facing);
 
             if (fallbackId && token === startTokenRef.current) {
               const scanner = createScanner();
               instanceRef.current = scanner;
-              await scanner.start(fallbackId, config, onSuccess, () => {});
+              await scanner.start(
+                fallbackId,
+                { fps: config.fps, qrbox: config.qrbox, ...(apple ? {} : { aspectRatio: config.aspectRatio }) },
+                onSuccess,
+                () => {},
+              );
               preferredCameraIdRef.current = fallbackId;
               started = true;
             }
-          } catch (error) {
-            lastError = error;
+          } catch (err) {
+            lastError = err;
+          }
+        }
+
+        // Last resort: empty constraints + videoConstraints only (some iOS builds).
+        if (!started && token === startTokenRef.current) {
+          try {
+            const scanner = createScanner();
+            instanceRef.current = scanner;
+            await scanner.start(
+              {},
+              {
+                fps: config.fps,
+                qrbox: config.qrbox,
+                videoConstraints: {
+                  facingMode: facing,
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                },
+              },
+              onSuccess,
+              () => {},
+            );
+            started = true;
+          } catch (err) {
+            lastError = err;
           }
         }
 
@@ -294,6 +461,8 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
           throw new Error("Camera unavailable. Check permissions and try again.");
         }
 
+        patchVideoElement(scannerRef.current);
+        await applyFocusBoost(instance);
         setActive(true);
         await refreshDeviceControls(instance);
       } catch (e) {
@@ -308,16 +477,33 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
         startingLockRef.current = false;
       }
     },
-    [handleDecoded, refreshDeviceControls, resetControls, scannerElementId, stopScanner],
+    [buildScanConfig, handleDecoded, refreshDeviceControls, resetControls, scannerElementId, stopScanner],
   );
 
   const switchCamera = useCallback(async () => {
-    if (cameras.length < 2 || startingLockRef.current) return;
-    const nextIndex = (cameraIndex + 1) % cameras.length;
-    const next = cameras[nextIndex];
-    setCameraIndex(nextIndex);
-    preferredCameraIdRef.current = next.id;
-    await startScanner(next.id);
+    if (startingLockRef.current) return;
+
+    // Prefer cycling real devices when the OS exposes more than one.
+    if (cameras.length > 1) {
+      const nextIndex = (cameraIndex + 1) % cameras.length;
+      const next = cameras[nextIndex];
+      setCameraIndex(nextIndex);
+      const label = next.label.toLowerCase();
+      const nextFacing: FacingMode = /front|user|face|selfie/.test(label)
+        ? "user"
+        : "environment";
+      facingModeRef.current = nextFacing;
+      setFacingMode(nextFacing);
+      await startScanner({ kind: "device", deviceId: next.id });
+      return;
+    }
+
+    // Android tablets / iPhones often report one device or unlabeled cams —
+    // toggle facingMode so Switch camera still works.
+    const nextFacing: FacingMode =
+      facingModeRef.current === "environment" ? "user" : "environment";
+    preferredCameraIdRef.current = null;
+    await startScanner({ kind: "facing", facingMode: nextFacing });
   }, [cameraIndex, cameras, startScanner]);
 
   const toggleTorch = useCallback(async () => {
@@ -376,6 +562,20 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
         instanceRef.current = scanner;
         const decoded = await scanner.scanFile(file, false);
         if (token !== startTokenRef.current) return;
+
+        if (continuousRef.current) {
+          await handleDecoded(decoded);
+          // Resume live camera after photo scan in continuous mode.
+          startingLockRef.current = false;
+          setScanningFile(false);
+          await startScanner(
+            preferredCameraIdRef.current
+              ? { kind: "device", deviceId: preferredCameraIdRef.current }
+              : { kind: "facing", facingMode: facingModeRef.current },
+          );
+          return;
+        }
+
         await handleDecoded(decoded);
       } catch (e) {
         if (token !== startTokenRef.current) return;
@@ -398,7 +598,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
         }
       }
     },
-    [handleDecoded, scannerElementId, stopScanner],
+    [handleDecoded, scannerElementId, startScanner, stopScanner],
   );
 
   useEffect(() => {
@@ -421,7 +621,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Scan Barcode</DialogTitle>
+          <DialogTitle>{continuous ? "Scan items" : "Scan Barcode"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -437,15 +637,16 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
             }}
           />
 
-          <div className="relative min-h-[280px] w-full overflow-hidden rounded-md bg-muted">
-            {/* Keep host in-flow while dialog is open so getUserMedia can size the video. */}
+          <div className="relative min-h-[280px] w-full overflow-hidden rounded-md bg-muted [&_video]:h-full [&_video]:w-full [&_video]:object-cover">
             <div id={scannerElementId} ref={scannerRef} className="min-h-[280px] w-full" />
 
             {showIdle ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 border border-dashed bg-background p-6 text-center">
                 <Camera className="h-10 w-10 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Tap below to enable the camera. Your browser will ask for permission.
+                  {continuous
+                    ? "Enable the camera once, then keep scanning items without closing."
+                    : "Tap below to enable the camera. Your browser will ask for permission."}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button onClick={() => void startScanner()} disabled={busy}>
@@ -496,21 +697,26 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
           {active ? (
             <div className="space-y-2">
               <p className="text-center text-xs text-muted-foreground">
-                Point the camera at a barcode or QR code
+                {continuous
+                  ? "Keep pointing at barcodes — items add automatically. Close when done."
+                  : "Point the camera at a barcode or QR code"}
               </p>
+              {continuous && lastScanned ? (
+                <p className="text-center text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  Last scan: {lastScanned}
+                </p>
+              ) : null}
               <div className="flex flex-wrap justify-center gap-2">
-                {cameras.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void switchCamera()}
-                    disabled={busy}
-                  >
-                    <SwitchCamera className="mr-1 h-4 w-4" />
-                    Switch camera
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void switchCamera()}
+                  disabled={busy}
+                >
+                  <SwitchCamera className="mr-1 h-4 w-4" />
+                  Switch camera
+                </Button>
                 {torchSupported ? (
                   <Button
                     type="button"
@@ -537,12 +743,19 @@ export function BarcodeScannerModal({ open, onOpenChange, onScan }: BarcodeScann
                   <ImageIcon className="mr-1 h-4 w-4" />
                   Photo
                 </Button>
+                {continuous ? (
+                  <Button type="button" size="sm" onClick={() => onOpenChange(false)}>
+                    Done
+                  </Button>
+                ) : null}
               </div>
-              {cameras.length > 1 ? (
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Using {cameras[cameraIndex]?.label ?? "camera"}
-                </p>
-              ) : null}
+              <p className="text-center text-[11px] text-muted-foreground">
+                {cameras.length > 1
+                  ? `Using ${cameras[cameraIndex]?.label ?? "camera"}`
+                  : facingMode === "environment"
+                    ? "Using rear camera"
+                    : "Using front camera"}
+              </p>
             </div>
           ) : null}
         </div>

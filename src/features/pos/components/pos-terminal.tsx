@@ -246,7 +246,12 @@ export function PosTerminal({
       />
 
       <HoldSalesDrawer open={holdOpen} onOpenChange={setHoldOpen} />
-      <BarcodeScannerModal open={scannerOpen} onOpenChange={setScannerOpen} onScan={handleBarcode} />
+      <BarcodeScannerModal
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScan={handleBarcode}
+        continuous
+      />
       <CustomerSelectDialog open={customerOpen} onOpenChange={setCustomerOpen} />
       <DiscountDialog open={discountOpen} onOpenChange={setDiscountOpen} />
       <ReceiptPreviewDialog saleId={receiptSaleId} open={receiptOpen} onOpenChange={setReceiptOpen} />
