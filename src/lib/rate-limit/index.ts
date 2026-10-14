@@ -7,12 +7,12 @@ import type { RateLimitOptions, RateLimitResult } from "./types";
 export type { RateLimitOptions, RateLimitResult };
 export { getClientIp };
 
-function useMemoryStore(): boolean {
+function prefersMemoryStore(): boolean {
   return process.env.RATE_LIMIT_STORE === "memory";
 }
 
 export async function rateLimit(options: RateLimitOptions): Promise<RateLimitResult> {
-  if (useMemoryStore()) {
+  if (prefersMemoryStore()) {
     return checkMemoryRateLimit(options);
   }
 
