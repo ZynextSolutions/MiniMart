@@ -1,42 +1,22 @@
 import { RateLimitError } from "@/lib/errors/app-error";
 import { getClientIp } from "./client-ip";
 import { checkMemoryRateLimit } from "./memory-limiter";
-import { checkUpstashRateLimit } from "./upstash-limiter";
+import { checkPostgresRateLimit } from "./postgres-limiter";
 import type { RateLimitOptions, RateLimitResult } from "./types";
 
 export type { RateLimitOptions, RateLimitResult };
 export { getClientIp };
 
-function isProduction(): boolean {
-  return process.env.NODE_ENV === "production";
-}
-
-function isUpstashConfigured(): boolean {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
-  );
-}
-
-let upstashWarningLogged = false;
-
-function assertProductionRateLimiter(): void {
-  if (isProduction() && !isUpstashConfigured() && !upstashWarningLogged) {
-    upstashWarningLogged = true;
-    console.warn(
-      "[rate-limit] UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not set; " +
-        "using in-memory rate limiting (configure Upstash for production).",
-    );
-  }
+function useMemoryStore(): boolean {
+  return process.env.RATE_LIMIT_STORE === "memory";
 }
 
 export async function rateLimit(options: RateLimitOptions): Promise<RateLimitResult> {
-  assertProductionRateLimiter();
-
-  if (isUpstashConfigured()) {
-    return checkUpstashRateLimit(options);
+  if (useMemoryStore()) {
+    return checkMemoryRateLimit(options);
   }
 
-  return checkMemoryRateLimit(options);
+  return checkPostgresRateLimit(options);
 }
 
 export async function enforceRateLimit(options: RateLimitOptions): Promise<RateLimitResult> {

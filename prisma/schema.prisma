@@ -1635,3 +1635,14 @@ model FeatureFlagOverride {
   @@unique([featureFlagId, organizationId])
   @@map("feature_flag_overrides")
 }
+
+/// Shared counters for login, signup, and API rate limits. Not tenant-scoped.
+model RateLimit {
+  key       String   @id
+  count     Int
+  resetAt   DateTime @map("reset_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([resetAt])
+  @@map("rate_limits")
+}
